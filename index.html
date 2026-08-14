@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+<title>Popskate - نظام الحجوزات</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; font-family: 'Tajawal', sans-serif; margin: 0; padding: 0; }
+  h1, h2, .display { font-family: 'Cairo', sans-serif; }
+  body { background: #F4F1EA; color: #2B2822; }
+  button { cursor: pointer; border: none; font-family: inherit; }
+  input, select, textarea { font-family: inherit; }
+  ::placeholder { color: #9A9591; }
+  #root { min-height: 100vh; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<!-- Firebase SDK -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+  import {
+    getDatabase, ref, onValue, set, push, remove
+  } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js";
+
+  // ============================================
+  // إعدادات Firebase الخاصة بمشروع Popskate
+  // ============================================
+  const firebaseConfig = {
+    apiKey: "AIzaSyDMbm7dpYeop4MJAXBtC6J6sNQYvHU8WZw",
+    authDomain: "popskate-480e5.firebaseapp.com",
+    databaseURL: "https://popskate-480e5-default-rtdb.firebaseio.com",
+    projectId: "popskate-480e5",
+    storageBucket: "popskate-480e5.firebasestorage.app",
+    messagingSenderId: "849168464452",
+    appId: "1:849168464452:web:0e70ef682616ab50389a11",
+    measurementId: "G-WH6PF04R2J"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+  const bookingsRef = ref(db, 'bookings');
+
+  window.__firebase = { db, ref, onValue, set, push, remove, bookingsRef };
+</script>
+
+<!-- React -->
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<script type="text/babel" data-type="module">
+const { useState, useEffect, useCallback } = React;
+
+const LOGO_URL = "https://i.ibb.co/N6fd1z18/1000066516.jpg"; // ⚠️ استبدل هذا برابط الصورة المباشر من ibb.co
+
+const GROUPS = [
+  { id: 'kids-sat', name: 'أطفال - السبت 10ص', color: '#E8A33D' },
+  { id: 'kids-tue', name: 'أطفال - الثلاثاء 5م', color: '#E8A33D' },
+  { id: 'teens-sun', name: 'ناشئين - الأحد 6م', color: '#2E86AB' },
+  { id: 'adults-fri', name: 'كبار - الجمعة 4م', color: '#8E44AD' },
+  { id: 'private', name: 'حصة خاصة', color: '#C0392B' },
+];
+
+function SkateBooking() {
+  const [bookings, setBookings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [group, setGroup] = useState(GROUPS[0].id);
+  const [paid, setPaid] = useState(false);
+  const [amount, setAmount] = useState('');
+  const [notes, setNotes] = useState('');
+
+  const showToast = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2500);
+  };
+
+  // الاتصال اللحظي بقاعدة بيانات Firebase - أي تغيير من أي جهاز يظهر هنا فورًا
+  useEffect(() => {
+    const { onValue, bookingsRef } = window.__firebase;
+    const unsubscribe = onValue(bookingsRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        const list = Object.entries(data)
+          .map(([id, val]) => ({ id, ...val }))
+          .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        setBookings(list);
+      } else {
+        setBookings([]);
+      }
+      setLoading(false);
+    }, (error) => {
+      console.error(error);
+      setLoading(false);
+      showToast('حصل خطأ في الاتصال بقاعدة البيانات');
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const resetForm = () => {
+    setName('');
+    setPhone('');
+    setGroup(GROUPS[0].id);
+    setPaid(false);
+    setAmount('');
+    setNotes('');
+    setShowForm(false);
+  };
+
+  const addBooking = async (e) => {
+    e.preventDefault();
+    if (!name.trim() || !phone.trim()) {
+      showToast('محتاجين الاسم ورقم الموبايل على الأقل');
+      return;
+    }
+    setSyncing(true);
+    const { push, set, bookingsRef } = window.__firebase;
+    try {
+      const newRef = push(bookingsRef);
+      await set(newRef, {
+        name: name.trim(),
+        phone: phone.trim(),
+        group,
+        paid,
+        amount: amount.trim(),
+        notes: notes.trim(),
+        createdAt: Date.now(),
+      });
+      showToast('تم تسجيل الحجز وظهر لكل الأجهزة');
+      resetForm();
+    } catch (err) {
+      showToast('حصل خطأ، حاول تاني');
+    }
+    setSyncing(false);
+  };
+
+  const togglePaid = async (id, currentPaid) => {
+    const { ref, set, db } = window.__firebase;
+    const bookingRef = ref(db, `bookings/${id}`);
+    const booking = bookings.find((b) => b.id === id);
+    setSyncing(true);
+    try {
+      await set(bookingRef, { ...booking, paid: !currentPaid, id: undefined });
+    } catch (err) {
+      showToast('حصل خطأ في التحديث');
+    }
+    setSyncing(false);
+  };
+
+  const deleteBooking = async (id) => {
+    const { ref, remove, db } = window.__firebase;
+    const bookingRef = ref(db, `bookings/${id}`);
+    setSyncing(true);
+    try {
+      await remove(bookingRef);
+      showToast('تم حذف الحجز');
+    } catch (err) {
+      showToast('حصل خطأ في الحذف');
+    }
+    setSyncing(false);
+  };
+
+  const groupInfo = (id) => GROUPS.find((g) => g.id === id) || GROUPS[0];
+  const totalToday = bookings.length;
+  const paidCount = bookings.filter((b) => b.paid).length;
+
+  return (
+    <div style={styles.page}>
+      <header style={styles.header}>
+        <div style={styles.headerInner}>
+          <div style={styles.logoRow}>
+            <img src={LOGO_URL} alt="Popskate" style={styles.logoMark} />
+            <div>
+              <h1 style={styles.title}>Popskate</h1>
+              <div style={styles.subtitle}>نظام حجوزات مركز السكيت</div>
+            </div>
+          </div>
+          <div style={styles.syncBadge}>
+            <span style={{ ...styles.syncDot, background: syncing ? '#E8A33D' : '#3BA776' }} />
+            {syncing ? 'بيتم الحفظ...' : 'متزامن'}
+          </div>
+        </div>
+      </header>
+
+      <div style={styles.statsRow}>
+        <div style={styles.statCard}>
+          <div style={styles.statNum}>{totalToday}</div>
+          <div style={styles.statLabel}>إجمالي الحجوزات</div>
+        </div>
+        <div style={styles.statCard}>
+          <div style={{ ...styles.statNum, color: '#3BA776' }}>{paidCount}</div>
+          <div style={styles.statLabel}>تم الدفع</div>
+        </div>
+        <div style={styles.statCard}>
+          <div style={{ ...styles.statNum, color: '#C0392B' }}>{totalToday - paidCount}</div>
+          <div style={styles.statLabel}>لسه هيدفع</div>
+        </div>
+      </div>
+
+      <div style={styles.content}>
+        {!showForm && (
+          <button style={styles.addBtn} onClick={() => setShowForm(true)}>+ حجز جديد</button>
+        )}
+
+        {showForm && (
+          <form onSubmit={addBooking} style={styles.formCard}>
+            <div style={styles.formHeader}>
+              <span style={styles.display}>بيانات المتدرب</span>
+              <button type="button" style={styles.closeBtn} onClick={resetForm}>✕</button>
+            </div>
+
+            <label style={styles.label}>اسم المتدرب</label>
+            <input style={styles.input} value={name} onChange={(e) => setName(e.target.value)} placeholder="مثال: يوسف أحمد" />
+
+            <label style={styles.label}>رقم الموبايل</label>
+            <input style={styles.input} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="01xxxxxxxxx" type="tel" />
+
+            <label style={styles.label}>المجموعة</label>
+            <select style={styles.input} value={group} onChange={(e) => setGroup(e.target.value)}>
+              {GROUPS.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+            </select>
+
+            <label style={styles.label}>المبلغ (اختياري)</label>
+            <input style={styles.input} value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="مثال: 300 جنيه" />
+
+            <label style={styles.checkRow}>
+              <input type="checkbox" checked={paid} onChange={(e) => setPaid(e.target.checked)} style={styles.checkbox} />
+              تم الدفع كاش دلوقتي
+            </label>
+
+            <label style={styles.label}>ملاحظات (اختياري)</label>
+            <textarea style={{ ...styles.input, minHeight: 60, resize: 'vertical' }} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="أي تفاصيل إضافية" />
+
+            <button type="submit" style={styles.submitBtn}>حفظ الحجز</button>
+          </form>
+        )}
+
+        <div style={styles.listHeader}><span style={styles.display}>الحجوزات</span></div>
+
+        {loading ? (
+          <div style={styles.empty}>بيتم تحميل الحجوزات...</div>
+        ) : bookings.length === 0 ? (
+          <div style={styles.empty}>مفيش حجوزات لسه. أول حجز يظهر هنا فورًا.</div>
+        ) : (
+          <div style={styles.list}>
+            {bookings.map((b) => {
+              const g = groupInfo(b.group);
+              return (
+                <div key={b.id} style={styles.bookingCard}>
+                  <div style={{ ...styles.groupStripe, background: g.color }} />
+                  <div style={styles.bookingBody}>
+                    <div style={styles.bookingTop}>
+                      <span style={styles.bookingName}>{b.name}</span>
+                      <button style={styles.deleteBtn} onClick={() => deleteBooking(b.id)} title="حذف">✕</button>
+                    </div>
+                    <div style={styles.bookingPhone}>{b.phone}</div>
+                    <div style={{ ...styles.groupTag, background: g.color + '22', color: g.color }}>{g.name}</div>
+                    {b.amount && <div style={styles.amountText}>المبلغ: {b.amount}</div>}
+                    {b.notes && <div style={styles.notesText}>{b.notes}</div>}
+                    <button
+                      style={{
+                        ...styles.paidBtn,
+                        background: b.paid ? '#3BA77622' : '#F4F1EA',
+                        color: b.paid ? '#3BA776' : '#9A9591',
+                        border: b.paid ? '1px solid #3BA77655' : '1px solid #E5E0D8',
+                      }}
+                      onClick={() => togglePaid(b.id, b.paid)}
+                    >
+                      {b.paid ? '✓ تم الدفع' : 'لسه هيدفع'}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {toast && <div style={styles.toast}>{toast}</div>}
+    </div>
+  );
+}
+
+const styles = {
+  page: { minHeight: '100vh', background: '#F4F1EA', color: '#2B2822', paddingBottom: 40 },
+  header: { background: '#2B2822', color: '#F4F1EA', padding: '20px 16px' },
+  headerInner: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', maxWidth: 480, margin: '0 auto' },
+  logoRow: { display: 'flex', alignItems: 'center', gap: 12 },
+  logoMark: { width: 48, height: 48, borderRadius: 10, objectFit: 'cover', background: '#000' },
+  title: { margin: 0, fontSize: 22, fontWeight: 900 },
+  subtitle: { fontSize: 12, opacity: 0.7, marginTop: 2 },
+  syncBadge: { fontSize: 11, display: 'flex', alignItems: 'center', gap: 6, opacity: 0.85 },
+  syncDot: { width: 8, height: 8, borderRadius: '50%' },
+  statsRow: { display: 'flex', gap: 10, maxWidth: 480, margin: '16px auto 0', padding: '0 16px' },
+  statCard: { flex: 1, background: '#fff', borderRadius: 14, padding: '14px 8px', textAlign: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' },
+  statNum: { fontSize: 24, fontWeight: 900, fontFamily: 'Cairo, sans-serif' },
+  statLabel: { fontSize: 11, color: '#7A756D', marginTop: 4 },
+  content: { maxWidth: 480, margin: '0 auto', padding: '20px 16px' },
+  addBtn: { width: '100%', background: '#E8A33D', color: '#2B2822', fontWeight: 700, fontSize: 16, padding: '14px', borderRadius: 14, marginBottom: 20 },
+  formCard: { background: '#fff', borderRadius: 16, padding: 18, marginBottom: 24, boxShadow: '0 2px 10px rgba(0,0,0,0.08)' },
+  formHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, fontSize: 16, fontWeight: 700 },
+  closeBtn: { background: '#F4F1EA', width: 28, height: 28, borderRadius: '50%', fontSize: 14 },
+  label: { display: 'block', fontSize: 12, color: '#7A756D', marginBottom: 6, marginTop: 12 },
+  input: { width: '100%', padding: '11px 12px', borderRadius: 10, border: '1px solid #E5E0D8', fontSize: 14, background: '#FAF8F4' },
+  checkRow: { display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, fontSize: 14 },
+  checkbox: { width: 18, height: 18 },
+  submitBtn: { width: '100%', background: '#2B2822', color: '#F4F1EA', fontWeight: 700, fontSize: 15, padding: '13px', borderRadius: 10, marginTop: 18 },
+  listHeader: { fontSize: 15, fontWeight: 700, marginBottom: 12 },
+  empty: { textAlign: 'center', color: '#9A9591', fontSize: 13, padding: '30px 0' },
+  list: { display: 'flex', flexDirection: 'column', gap: 10 },
+  bookingCard: { display: 'flex', background: '#fff', borderRadius: 14, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' },
+  groupStripe: { width: 6 },
+  bookingBody: { flex: 1, padding: '12px 14px' },
+  bookingTop: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' },
+  bookingName: { fontWeight: 700, fontSize: 15 },
+  deleteBtn: { background: 'transparent', color: '#C0392B', fontSize: 14, opacity: 0.6, padding: 4 },
+  bookingPhone: { fontSize: 13, color: '#7A756D', marginTop: 2, direction: 'ltr', textAlign: 'right' },
+  groupTag: { display: 'inline-block', fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 8, marginTop: 8 },
+  amountText: { fontSize: 12, color: '#7A756D', marginTop: 6 },
+  notesText: { fontSize: 12, color: '#9A9591', marginTop: 4, fontStyle: 'italic' },
+  paidBtn: { marginTop: 10, fontSize: 12, fontWeight: 600, padding: '7px 14px', borderRadius: 8, width: '100%' },
+  toast: { position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', background: '#2B2822', color: '#fff', padding: '10px 20px', borderRadius: 30, fontSize: 13, boxShadow: '0 4px 14px rgba(0,0,0,0.2)' },
+};
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<SkateBooking />);
+</script>
+</body>
+</html>
