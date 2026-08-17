@@ -40,9 +40,8 @@
   const app = initializeApp(firebaseConfig);
   const db = getDatabase(app);
   const bookingsRef = ref(db, 'bookings');
-  const archiveRef = ref(db, 'archive');
 
-  window.__firebase = { db, ref, onValue, set, push, remove, bookingsRef, archiveRef };
+  window.__firebase = { db, ref, onValue, set, push, remove, bookingsRef };
 </script>
 
 <!-- React -->
@@ -51,18 +50,15 @@
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
 <script type="text/babel" data-type="module">
-const { useState, useEffect, useMemo } = React;
+const { useState, useEffect, useCallback } = React;
 
 const LOGO_URL = "https://i.ibb.co/gMQ0KfwD/IMG-20260313-164930.jpg";
 
-// السبت والاتنين والأربع والخميس: 3 إلى 9. الأحد والثلاثاء: 12 إلى 3.
 const DAYS = [
-  { id: 'sat', name: 'السبت', times: ['3:00', '4:00', '5:00', '6:00', '7:00', '8:00', '9:00'] },
-  { id: 'sun', name: 'الأحد', times: ['12:00', '1:00', '2:00', '3:00'] },
-  { id: 'mon', name: 'الاتنين', times: ['3:00', '4:00', '5:00', '6:00', '7:00', '8:00', '9:00'] },
-  { id: 'tue', name: 'الثلاثاء', times: ['12:00', '1:00', '2:00', '3:00'] },
-  { id: 'wed', name: 'الأربع', times: ['3:00', '4:00', '5:00', '6:00', '7:00', '8:00', '9:00'] },
-  { id: 'thu', name: 'الخميس', times: ['3:00', '4:00', '5:00', '6:00', '7:00', '8:00', '9:00'] },
+  { id: 'sat', name: 'السبت', times: ['4:00', '5:00', '6:00'] },
+  { id: 'mon', name: 'الاتنين', times: ['4:00', '5:00', '6:00'] },
+  { id: 'wed', name: 'الأربع', times: ['5:00', '6:00', '7:00', '8:00'] },
+  { id: 'thu', name: 'الخميس', times: ['4:00', '5:00', '6:00', '7:00'] },
 ];
 
 const SESSION_OPTIONS = [4, 8, 12, 16];
@@ -71,28 +67,17 @@ function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function makeAttendance(sessionsCount) {
-  // كل 4 حصص = خانة واحدة (حضور/غياب/اعتذار)
-  const slots = Math.ceil(sessionsCount / 4);
-  return Array.from({ length: slots }, (_, i) => ({
-    index: i + 1,
-    status: null, // 'present' | 'absent' | 'excused'
-    excuseReason: '',
-  }));
-}
-
 function PopskateApp() {
   const [tab, setTab] = useState('form');
   const [bookings, setBookings] = useState([]);
-  const [archive, setArchive] = useState([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [toast, setToast] = useState(null);
 
-  // form state
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [selectedSlots, setSelectedSlots] = useState([]); // [{day, time}]
+  const [day, setDay] = useState('');
+  const [time, setTime] = useState('');
   const [amount, setAmount] = useState('');
   const [paid, setPaid] = useState(false);
   const [sessions, setSessions] = useState(null);
@@ -100,15 +85,9 @@ function PopskateApp() {
   const [endDate, setEndDate] = useState('');
   const [notes, setNotes] = useState('');
   const [errors, setErrors] = useState({});
-  const [phoneMatch, setPhoneMatch] = useState(null);
 
-  // groups view state
   const [viewDay, setViewDay] = useState(null);
   const [viewTime, setViewTime] = useState(null);
-  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
-  const [confirmArchiveDeleteId, setConfirmArchiveDeleteId] = useState(null);
-  const [excuseModal, setExcuseModal] = useState(null); // { bookingId, slotIndex }
-  const [excuseText, setExcuseText] = useState('');
 
   const showToast = (msg) => {
     setToast(msg);
@@ -116,49 +95,31 @@ function PopskateApp() {
   };
 
   useEffect(() => {
-    const { onValue, bookingsRef, archiveRef } = window.__firebase;
-    const unsub1 = onValue(bookingsRef, (snapshot) => {
+    const { onValue, bookingsRef } = window.__firebase;
+    const unsubscribe = onValue(bookingsRef, (snapshot) => {
       const data = snapshot.val();
-      const list = data
-        ? Object.entries(data).map(([id, val]) => ({ id, ...val })).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
-        : [];
-      setBookings(list);
+      if (data) {
+        const list = Object.entries(data)
+          .map(([id, val]) => ({ id, ...val }))
+          .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        setBookings(list);
+      } else {
+        setBookings([]);
+      }
       setLoading(false);
     }, (error) => {
+      console.error(error);
       setLoading(false);
-      showToast('خطأ اتصال: ' + error.message);
+      showToast('حصل خطأ في الاتصال بقاعدة البيانات: ' + error.message);
     });
-    const unsub2 = onValue(archiveRef, (snapshot) => {
-      const data = snapshot.val();
-      const list = data
-        ? Object.entries(data).map(([id, val]) => ({ id, ...val })).sort((a, b) => (b.archivedAt || 0) - (a.archivedAt || 0))
-        : [];
-      setArchive(list);
-    }, (error) => {
-      showToast('خطأ اتصال بالأرشيف: ' + error.message);
-    });
-    return () => { unsub1(); unsub2(); };
+    return () => unsubscribe();
   }, []);
-
-  // البحث الفوري عن رقم الهاتف في الأرشيف والحجوزات الحالية
-  useEffect(() => {
-    const cleaned = phone.trim();
-    if (cleaned.length < 6) { setPhoneMatch(null); return; }
-    const activeMatch = bookings.find((b) => b.phone === cleaned);
-    const archiveMatch = !activeMatch ? archive.find((b) => b.phone === cleaned) : null;
-    setPhoneMatch(activeMatch ? { ...activeMatch, source: 'active' } : archiveMatch ? { ...archiveMatch, source: 'archive' } : null);
-  }, [phone, bookings, archive]);
-
-  const fillFromMatch = () => {
-    if (!phoneMatch) return;
-    setName(phoneMatch.name || '');
-    showToast('تم استدعاء بيانات العميل');
-  };
 
   const resetForm = () => {
     setName('');
     setPhone('');
-    setSelectedSlots([]);
+    setDay('');
+    setTime('');
     setAmount('');
     setPaid(false);
     setSessions(null);
@@ -166,15 +127,6 @@ function PopskateApp() {
     setEndDate('');
     setNotes('');
     setErrors({});
-    setPhoneMatch(null);
-  };
-
-  const toggleSlot = (dayId, time) => {
-    setSelectedSlots((prev) => {
-      const exists = prev.find((s) => s.day === dayId && s.time === time);
-      if (exists) return prev.filter((s) => !(s.day === dayId && s.time === time));
-      return [...prev, { day: dayId, time }];
-    });
   };
 
   const validate = () => {
@@ -182,7 +134,8 @@ function PopskateApp() {
     const missing = [];
     if (!name.trim()) { e.name = true; missing.push('الاسم'); }
     if (!phone.trim()) { e.phone = true; missing.push('الموبايل'); }
-    if (selectedSlots.length === 0) { e.slots = true; missing.push('اليوم والساعة'); }
+    if (!day) { e.day = true; missing.push('اليوم'); }
+    if (!time) { e.time = true; missing.push('الساعة'); }
     if (!amount.trim()) { e.amount = true; missing.push('المبلغ'); }
     if (!sessions) { e.sessions = true; missing.push('عدد الحصص'); }
     if (!startDate) { e.startDate = true; missing.push('تاريخ البداية'); }
@@ -205,14 +158,14 @@ function PopskateApp() {
       await set(newRef, {
         name: name.trim(),
         phone: phone.trim(),
-        slots: selectedSlots,
+        day,
+        time,
         amount: amount.trim(),
         paid,
         sessions,
         startDate,
         endDate,
         notes: notes.trim(),
-        attendance: makeAttendance(sessions),
         createdAt: Date.now(),
       });
       showToast('تم تسجيل الاشتراك بنجاح');
@@ -223,104 +176,36 @@ function PopskateApp() {
     setSyncing(false);
   };
 
-  const updateBooking = async (id, patch) => {
+  const togglePaid = async (id, currentPaid) => {
     const { ref, set, db } = window.__firebase;
-    const booking = bookings.find((b) => b.id === id);
-    if (!booking) return;
     const bookingRef = ref(db, `bookings/${id}`);
+    const booking = bookings.find((b) => b.id === id);
     setSyncing(true);
     try {
       const { id: _drop, ...rest } = booking;
-      await set(bookingRef, { ...rest, ...patch });
+      await set(bookingRef, { ...rest, paid: !currentPaid });
     } catch (err) {
       showToast('حصل خطأ في التحديث');
     }
     setSyncing(false);
   };
 
-  const togglePaid = (id, currentPaid) => updateBooking(id, { paid: !currentPaid });
-
-  const updateNotes = (id, newNotes) => updateBooking(id, { notes: newNotes });
-
-  const setAttendance = (id, slotIndex, status, excuseReason) => {
-    const booking = bookings.find((b) => b.id === id);
-    if (!booking) return;
-    const attendance = (booking.attendance || []).map((a) =>
-      a.index === slotIndex ? { ...a, status, excuseReason: status === 'excused' ? (excuseReason || '') : '' } : a
-    );
-    updateBooking(id, { attendance });
-  };
-
-  const handleAttendanceClick = (bookingId, slotIndex, status) => {
-    if (status === 'excused') {
-      setExcuseText('');
-      setExcuseModal({ bookingId, slotIndex });
-    } else {
-      setAttendance(bookingId, slotIndex, status);
-    }
-  };
-
-  const confirmExcuse = () => {
-    if (!excuseModal) return;
-    setAttendance(excuseModal.bookingId, excuseModal.slotIndex, 'excused', excuseText.trim());
-    setExcuseModal(null);
-  };
-
-  const archiveBooking = async (id) => {
-    const { ref, set, remove, db, archiveRef, push } = window.__firebase;
-    const booking = bookings.find((b) => b.id === id);
-    if (!booking) return;
-    setSyncing(true);
-    try {
-      const { id: _drop, ...rest } = booking;
-      const newArchiveRef = push(archiveRef);
-      await set(newArchiveRef, { ...rest, archivedAt: Date.now() });
-      await remove(ref(db, `bookings/${id}`));
-      showToast('تم نقل الاشتراك للأرشيف');
-    } catch (err) {
-      showToast('حصل خطأ في الأرشفة');
-    }
-    setSyncing(false);
-    setConfirmDeleteId(null);
-  };
-
-  const deleteFromArchive = async (id) => {
+  const deleteBooking = async (id) => {
     const { ref, remove, db } = window.__firebase;
+    const bookingRef = ref(db, `bookings/${id}`);
     setSyncing(true);
     try {
-      await remove(ref(db, `archive/${id}`));
-      showToast('تم حذف الاشتراك نهائيًا من الأرشيف');
+      await remove(bookingRef);
+      showToast('تم حذف الاشتراك');
     } catch (err) {
       showToast('حصل خطأ في الحذف');
     }
     setSyncing(false);
-    setConfirmArchiveDeleteId(null);
   };
 
   const dayInfo = (id) => DAYS.find((d) => d.id === id);
-
-  const groupMembers = (dId, t) =>
-    bookings.filter((b) => (b.slots || []).some((s) => s.day === dId && s.time === t));
-
-  // عداد الأشخاص الفعليين (بدون تكرار) في يوم معين، بحساب رقم الهاتف
-  const uniqueCountForDay = (dId) => {
-    const phones = new Set(
-      bookings.filter((b) => (b.slots || []).some((s) => s.day === dId)).map((b) => b.phone)
-    );
-    return phones.size;
-  };
-
-  const uniqueCountForSlot = (dId, t) => {
-    const phones = new Set(groupMembers(dId, t).map((b) => b.phone));
-    return phones.size;
-  };
-
-  const attendanceLabel = (status) => {
-    if (status === 'present') return 'حضور';
-    if (status === 'absent') return 'غياب';
-    if (status === 'excused') return 'اعتذار';
-    return '—';
-  };
+  const groupMembers = (dId, t) => bookings.filter((b) => b.day === dId && b.time === t);
+  const selectedDayObj = DAYS.find((d) => d.id === day);
 
   return (
     <div dir="rtl" style={styles.page}>
@@ -340,8 +225,7 @@ function PopskateApp() {
         </div>
         <div style={styles.tabs}>
           <button style={{ ...styles.tabBtn, ...(tab === 'form' ? styles.tabBtnActive : {}) }} onClick={() => setTab('form')}>+ اشتراك جديد</button>
-          <button style={{ ...styles.tabBtn, ...(tab === 'groups' ? styles.tabBtnActive : {}) }} onClick={() => { setTab('groups'); setViewDay(null); setViewTime(null); }}>المجاميع</button>
-          <button style={{ ...styles.tabBtn, ...(tab === 'archive' ? styles.tabBtnActive : {}) }} onClick={() => setTab('archive')}>الأرشيف</button>
+          <button style={{ ...styles.tabBtn, ...(tab === 'groups' ? styles.tabBtnActive : {}) }} onClick={() => setTab('groups')}>المجاميع</button>
         </div>
       </header>
 
@@ -354,33 +238,27 @@ function PopskateApp() {
             <label style={styles.label}>رقم الموبايل</label>
             <input style={{ ...styles.input, ...(errors.phone ? styles.inputError : {}) }} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="01xxxxxxxxx" type="tel" />
 
-            {phoneMatch && (
-              <div style={styles.matchBox}>
-                <div style={styles.matchText}>
-                  ⚠️ الرقم ده موجود قبل كده {phoneMatch.source === 'archive' ? 'في الأرشيف' : 'في اشتراك حالي'} باسم "{phoneMatch.name}"
-                </div>
-                <button type="button" style={styles.matchBtn} onClick={fillFromMatch}>استدعاء البيانات</button>
-              </div>
-            )}
-
-            <label style={styles.label}>الأيام والمواعيد (ممكن تختار أكتر من موعد)</label>
-            <div style={{ ...styles.daysBox, ...(errors.slots && selectedSlots.length === 0 ? styles.inputError : {}) }}>
+            <label style={styles.label}>اليوم</label>
+            <div style={styles.pillRow}>
               {DAYS.map((d) => (
-                <div key={d.id} style={styles.dayBlock}>
-                  <div style={styles.dayBlockTitle}>{d.name}</div>
-                  <div style={styles.pillRow}>
-                    {d.times.map((t) => {
-                      const active = selectedSlots.some((s) => s.day === d.id && s.time === t);
-                      return (
-                        <button key={t} type="button" style={{ ...styles.pillSmall, ...(active ? styles.pillActive : {}) }} onClick={() => toggleSlot(d.id, t)}>
-                          {t}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+                <button key={d.id} type="button" style={{ ...styles.pill, ...(day === d.id ? styles.pillActive : {}), ...(errors.day && !day ? styles.pillError : {}) }} onClick={() => { setDay(d.id); setTime(''); }}>
+                  {d.name}
+                </button>
               ))}
             </div>
+
+            {selectedDayObj && (
+              <>
+                <label style={styles.label}>الساعة</label>
+                <div style={styles.pillRow}>
+                  {selectedDayObj.times.map((t) => (
+                    <button key={t} type="button" style={{ ...styles.pill, ...(time === t ? styles.pillActive : {}), ...(errors.time && !time ? styles.pillError : {}) }} onClick={() => setTime(t)}>
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
 
             <label style={styles.label}>عدد الحصص</label>
             <div style={styles.pillRow}>
@@ -425,12 +303,15 @@ function PopskateApp() {
               <>
                 <div style={styles.listHeader}><span style={styles.display}>اختار اليوم</span></div>
                 <div style={styles.groupGrid}>
-                  {DAYS.map((d) => (
-                    <button key={d.id} style={styles.groupCard} onClick={() => setViewDay(d.id)}>
-                      <div style={styles.groupCardTitle}>{d.name}</div>
-                      <div style={styles.groupCardCount}>{uniqueCountForDay(d.id)} متدرب</div>
-                    </button>
-                  ))}
+                  {DAYS.map((d) => {
+                    const count = bookings.filter((b) => b.day === d.id).length;
+                    return (
+                      <button key={d.id} style={styles.groupCard} onClick={() => setViewDay(d.id)}>
+                        <div style={styles.groupCardTitle}>{d.name}</div>
+                        <div style={styles.groupCardCount}>{count} متدرب</div>
+                      </button>
+                    );
+                  })}
                 </div>
               </>
             ) : !viewTime ? (
@@ -438,12 +319,15 @@ function PopskateApp() {
                 <button style={styles.backBtn} onClick={() => setViewDay(null)}>→ رجوع لليوم</button>
                 <div style={styles.listHeader}><span style={styles.display}>{dayInfo(viewDay).name} — اختار الساعة</span></div>
                 <div style={styles.groupGrid}>
-                  {dayInfo(viewDay).times.map((t) => (
-                    <button key={t} style={styles.groupCard} onClick={() => setViewTime(t)}>
-                      <div style={styles.groupCardTitle}>{t}</div>
-                      <div style={styles.groupCardCount}>{uniqueCountForSlot(viewDay, t)} متدرب</div>
-                    </button>
-                  ))}
+                  {dayInfo(viewDay).times.map((t) => {
+                    const count = groupMembers(viewDay, t).length;
+                    return (
+                      <button key={t} style={styles.groupCard} onClick={() => setViewTime(t)}>
+                        <div style={styles.groupCardTitle}>{t}</div>
+                        <div style={styles.groupCardCount}>{count} متدرب</div>
+                      </button>
+                    );
+                  })}
                 </div>
               </>
             ) : (
@@ -459,30 +343,15 @@ function PopskateApp() {
                         <div style={styles.bookingBody}>
                           <div style={styles.bookingTop}>
                             <span style={styles.bookingName}>{b.name}</span>
-                            <button style={styles.archiveBtn} onClick={() => setConfirmDeleteId(b.id)}>نقل للأرشيف</button>
+                            <button style={styles.deleteBtn} onClick={() => deleteBooking(b.id)}>✕</button>
                           </div>
                           <div style={styles.bookingPhone}>{b.phone}</div>
                           <div style={styles.metaRow}>
                             <span style={styles.metaTag}>{b.sessions} حصص</span>
                             <span style={styles.metaTag}>{b.startDate} → {b.endDate}</span>
                           </div>
-                          {(b.slots || []).length > 1 && (
-                            <div style={styles.metaRow}>
-                              {b.slots.map((s, i) => (
-                                <span key={i} style={styles.metaTagAlt}>{dayInfo(s.day) ? dayInfo(s.day).name : s.day} {s.time}</span>
-                              ))}
-                            </div>
-                          )}
                           <div style={styles.amountText}>المبلغ: {b.amount}</div>
-
-                          <label style={{ ...styles.label, marginTop: 10 }}>ملاحظات</label>
-                          <textarea
-                            style={{ ...styles.input, minHeight: 44, fontSize: 12 }}
-                            value={b.notes || ''}
-                            onChange={(e) => updateNotes(b.id, e.target.value)}
-                            placeholder="تعديل الملاحظات..."
-                          />
-
+                          {b.notes && <div style={styles.notesText}>{b.notes}</div>}
                           <button
                             style={{
                               ...styles.paidBtn,
@@ -494,35 +363,6 @@ function PopskateApp() {
                           >
                             {b.paid ? '✓ تم الدفع' : 'لسه هيدفع'}
                           </button>
-
-                          <label style={{ ...styles.label, marginTop: 12 }}>الحضور</label>
-                          <div style={styles.attendanceGrid}>
-                            {(b.attendance || []).map((a) => (
-                              <div key={a.index} style={styles.attendanceSlot}>
-                                <div style={styles.attendanceSlotTitle}>حصص {(a.index - 1) * 4 + 1}-{a.index * 4}</div>
-                                <div style={styles.attendanceBtnRow}>
-                                  <button
-                                    type="button"
-                                    style={{ ...styles.attBtn, ...(a.status === 'present' ? styles.attBtnPresent : {}) }}
-                                    onClick={() => handleAttendanceClick(b.id, a.index, 'present')}
-                                  >حضور</button>
-                                  <button
-                                    type="button"
-                                    style={{ ...styles.attBtn, ...(a.status === 'absent' ? styles.attBtnAbsent : {}) }}
-                                    onClick={() => handleAttendanceClick(b.id, a.index, 'absent')}
-                                  >غياب</button>
-                                  <button
-                                    type="button"
-                                    style={{ ...styles.attBtn, ...(a.status === 'excused' ? styles.attBtnExcused : {}) }}
-                                    onClick={() => handleAttendanceClick(b.id, a.index, 'excused')}
-                                  >اعتذار</button>
-                                </div>
-                                {a.status === 'excused' && a.excuseReason && (
-                                  <div style={styles.excuseNote}>السبب: {a.excuseReason}</div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
                         </div>
                       </div>
                     ))}
@@ -532,87 +372,7 @@ function PopskateApp() {
             )}
           </div>
         )}
-
-        {tab === 'archive' && (
-          <div>
-            <div style={styles.listHeader}><span style={styles.display}>الأرشيف</span></div>
-            {archive.length === 0 ? (
-              <div style={styles.empty}>الأرشيف فاضي دلوقتي</div>
-            ) : (
-              <div style={styles.list}>
-                {archive.map((b) => (
-                  <div key={b.id} style={styles.bookingCard}>
-                    <div style={styles.bookingBody}>
-                      <div style={styles.bookingTop}>
-                        <span style={styles.bookingName}>{b.name}</span>
-                        <button style={styles.deleteBtn} onClick={() => setConfirmArchiveDeleteId(b.id)}>✕</button>
-                      </div>
-                      <div style={styles.bookingPhone}>{b.phone}</div>
-                      <div style={styles.metaRow}>
-                        <span style={styles.metaTag}>{b.sessions} حصص</span>
-                        <span style={styles.metaTag}>{b.startDate} → {b.endDate}</span>
-                      </div>
-                      {(b.slots || []).map((s, i) => (
-                        <span key={i} style={styles.metaTagAlt}>{dayInfo(s.day) ? dayInfo(s.day).name : s.day} {s.time}</span>
-                      ))}
-                      <div style={styles.amountText}>المبلغ: {b.amount} — {b.paid ? 'تم الدفع' : 'لم يدفع'}</div>
-                      {b.notes && <div style={styles.notesText}>{b.notes}</div>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
       </div>
-
-      {/* تأكيد نقل للأرشيف */}
-      {confirmDeleteId && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.modalBox}>
-            <div style={styles.modalTitle}>نقل الاشتراك للأرشيف؟</div>
-            <div style={styles.modalText}>هيتشال من المجموعة الحالية ويتحفظ في الأرشيف.</div>
-            <div style={styles.modalActions}>
-              <button style={styles.modalCancel} onClick={() => setConfirmDeleteId(null)}>إلغاء</button>
-              <button style={styles.modalConfirm} onClick={() => archiveBooking(confirmDeleteId)}>نقل للأرشيف</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* تأكيد حذف نهائي من الأرشيف */}
-      {confirmArchiveDeleteId && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.modalBox}>
-            <div style={styles.modalTitle}>حذف نهائي من الأرشيف؟</div>
-            <div style={styles.modalText}>مينفعش ترجع البيانات دي تاني بعد الحذف.</div>
-            <div style={styles.modalActions}>
-              <button style={styles.modalCancel} onClick={() => setConfirmArchiveDeleteId(null)}>إلغاء</button>
-              <button style={styles.modalConfirmDanger} onClick={() => deleteFromArchive(confirmArchiveDeleteId)}>حذف نهائي</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* نافذة سبب الاعتذار */}
-      {excuseModal && (
-        <div style={styles.modalOverlay}>
-          <div style={styles.modalBox}>
-            <div style={styles.modalTitle}>سبب الاعتذار</div>
-            <textarea
-              autoFocus
-              style={{ ...styles.input, minHeight: 70, marginTop: 10 }}
-              value={excuseText}
-              onChange={(e) => setExcuseText(e.target.value)}
-              placeholder="اكتب سبب الاعتذار..."
-            />
-            <div style={styles.modalActions}>
-              <button style={styles.modalCancel} onClick={() => setExcuseModal(null)}>إلغاء</button>
-              <button style={styles.modalConfirm} onClick={confirmExcuse}>حفظ</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {toast && <div style={styles.toast}>{toast}</div>}
     </div>
@@ -629,8 +389,8 @@ const styles = {
   subtitle: { fontSize: 12, opacity: 0.7, marginTop: 2 },
   syncBadge: { fontSize: 11, display: 'flex', alignItems: 'center', gap: 6, opacity: 0.85 },
   syncDot: { width: 8, height: 8, borderRadius: '50%' },
-  tabs: { display: 'flex', gap: 4, maxWidth: 480, margin: '16px auto 0', padding: '0 16px' },
-  tabBtn: { flex: 1, background: 'transparent', color: '#F4F1EA99', fontSize: 12, fontWeight: 600, padding: '10px 0', borderBottom: '2px solid transparent' },
+  tabs: { display: 'flex', gap: 6, maxWidth: 480, margin: '16px auto 0', padding: '0 16px' },
+  tabBtn: { flex: 1, background: 'transparent', color: '#F4F1EA99', fontSize: 13, fontWeight: 600, padding: '10px 0', borderBottom: '2px solid transparent' },
   tabBtnActive: { color: '#E8A33D', borderBottom: '2px solid #E8A33D' },
   content: { maxWidth: 480, margin: '0 auto', padding: '20px 16px' },
   formCard: { background: '#fff', borderRadius: 16, padding: 18, boxShadow: '0 2px 10px rgba(0,0,0,0.08)' },
@@ -640,12 +400,8 @@ const styles = {
   row2: { display: 'flex', gap: 10 },
   pillRow: { display: 'flex', flexWrap: 'wrap', gap: 8 },
   pill: { padding: '9px 14px', borderRadius: 20, border: '1px solid #E5E0D8', background: '#FAF8F4', fontSize: 13, color: '#2B2822', fontWeight: 600 },
-  pillSmall: { padding: '6px 10px', borderRadius: 16, border: '1px solid #E5E0D8', background: '#FAF8F4', fontSize: 12, color: '#2B2822', fontWeight: 600 },
   pillActive: { background: '#E8A33D', border: '1px solid #E8A33D', color: '#2B2822' },
   pillError: { border: '1px solid #C0392B' },
-  daysBox: { border: '1px solid transparent', borderRadius: 10, padding: 2 },
-  dayBlock: { marginBottom: 12, background: '#FAF8F4', borderRadius: 10, padding: 10 },
-  dayBlockTitle: { fontSize: 13, fontWeight: 700, marginBottom: 8, fontFamily: 'Cairo, sans-serif' },
   checkRow: { display: 'flex', alignItems: 'center', gap: 8, marginTop: 16, fontSize: 14 },
   checkbox: { width: 18, height: 18 },
   submitBtn: { width: '100%', background: '#2B2822', color: '#F4F1EA', fontWeight: 700, fontSize: 15, padding: '13px', borderRadius: 10, marginTop: 20 },
@@ -659,38 +415,16 @@ const styles = {
   list: { display: 'flex', flexDirection: 'column', gap: 10 },
   bookingCard: { background: '#fff', borderRadius: 14, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' },
   bookingBody: { padding: '12px 14px' },
-  bookingTop: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+  bookingTop: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' },
   bookingName: { fontWeight: 700, fontSize: 15 },
   deleteBtn: { background: 'transparent', color: '#C0392B', fontSize: 14, opacity: 0.6, padding: 4 },
-  archiveBtn: { background: '#F4F1EA', color: '#7A756D', fontSize: 11, fontWeight: 600, padding: '5px 10px', borderRadius: 8 },
   bookingPhone: { fontSize: 13, color: '#7A756D', marginTop: 2, direction: 'ltr', textAlign: 'right' },
   metaRow: { display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' },
   metaTag: { fontSize: 11, background: '#F4F1EA', color: '#7A756D', padding: '3px 8px', borderRadius: 8 },
-  metaTagAlt: { fontSize: 11, background: '#2E86AB22', color: '#2E86AB', padding: '3px 8px', borderRadius: 8, marginTop: 4, display: 'inline-block', marginLeft: 4 },
   amountText: { fontSize: 12, color: '#7A756D', marginTop: 6 },
   notesText: { fontSize: 12, color: '#9A9591', marginTop: 4, fontStyle: 'italic' },
   paidBtn: { marginTop: 10, fontSize: 12, fontWeight: 600, padding: '7px 14px', borderRadius: 8, width: '100%' },
-  matchBox: { background: '#E8A33D22', border: '1px solid #E8A33D55', borderRadius: 10, padding: 10, marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 },
-  matchText: { fontSize: 12, color: '#8a5c1c' },
-  matchBtn: { background: '#E8A33D', color: '#2B2822', fontSize: 12, fontWeight: 700, padding: '8px', borderRadius: 8 },
-  attendanceGrid: { display: 'flex', flexDirection: 'column', gap: 8, marginTop: 6 },
-  attendanceSlot: { background: '#FAF8F4', borderRadius: 10, padding: 10 },
-  attendanceSlotTitle: { fontSize: 11, color: '#7A756D', marginBottom: 6, fontWeight: 600 },
-  attendanceBtnRow: { display: 'flex', gap: 6 },
-  attBtn: { flex: 1, padding: '7px 0', borderRadius: 8, border: '1px solid #E5E0D8', background: '#fff', fontSize: 11, fontWeight: 600, color: '#7A756D' },
-  attBtnPresent: { background: '#3BA77622', border: '1px solid #3BA776', color: '#3BA776' },
-  attBtnAbsent: { background: '#C0392B22', border: '1px solid #C0392B', color: '#C0392B' },
-  attBtnExcused: { background: '#E8A33D22', border: '1px solid #E8A33D', color: '#8a5c1c' },
-  excuseNote: { fontSize: 11, color: '#8a5c1c', marginTop: 6, fontStyle: 'italic' },
-  toast: { position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', background: '#2B2822', color: '#fff', padding: '10px 20px', borderRadius: 30, fontSize: 13, boxShadow: '0 4px 14px rgba(0,0,0,0.2)', maxWidth: '90%', textAlign: 'center', zIndex: 100 },
-  modalOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, zIndex: 200 },
-  modalBox: { background: '#fff', borderRadius: 16, padding: 20, maxWidth: 340, width: '100%' },
-  modalTitle: { fontSize: 16, fontWeight: 700, fontFamily: 'Cairo, sans-serif' },
-  modalText: { fontSize: 13, color: '#7A756D', marginTop: 8 },
-  modalActions: { display: 'flex', gap: 10, marginTop: 18 },
-  modalCancel: { flex: 1, padding: '11px 0', borderRadius: 10, background: '#F4F1EA', color: '#2B2822', fontWeight: 600, fontSize: 13 },
-  modalConfirm: { flex: 1, padding: '11px 0', borderRadius: 10, background: '#2B2822', color: '#fff', fontWeight: 600, fontSize: 13 },
-  modalConfirmDanger: { flex: 1, padding: '11px 0', borderRadius: 10, background: '#C0392B', color: '#fff', fontWeight: 600, fontSize: 13 },
+  toast: { position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', background: '#2B2822', color: '#fff', padding: '10px 20px', borderRadius: 30, fontSize: 13, boxShadow: '0 4px 14px rgba(0,0,0,0.2)' },
 };
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
