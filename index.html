@@ -4,92 +4,45 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
 <title>Popskate - نظام الحجوزات</title>
-
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
-
 <style>
-* {
-  box-sizing: border-box;
-  font-family: 'Tajawal', sans-serif;
-  margin: 0;
-  padding: 0;
-}
-
-h1, h2, h3, .display {
-  font-family: 'Cairo', sans-serif;
-}
-
-body {
-  background: #F4F1EA;
-  color: #2B2822;
-}
-
-button {
-  cursor: pointer;
-  border: none;
-  font-family: inherit;
-}
-
-input, select, textarea {
-  font-family: inherit;
-}
-
-::placeholder {
-  color: #9A9591;
-}
-
-#root {
-  min-height: 100vh;
-}
+  * { box-sizing: border-box; font-family: 'Tajawal', sans-serif; margin: 0; padding: 0; }
+  h1, .display { font-family: 'Cairo', sans-serif; }
+  body { background: #F4F1EA; color: #2B2822; }
+  button { cursor: pointer; border: none; font-family: inherit; }
+  input, select, textarea { font-family: inherit; }
+  ::placeholder { color: #9A9591; }
+  #root { min-height: 100vh; }
 </style>
 </head>
-
 <body>
-
 <div id="root"></div>
 
-<!-- Firebase -->
+<!-- Firebase SDK -->
 <script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+  import {
+    getDatabase, ref, onValue, set, push, remove
+  } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js";
 
-import { initializeApp } from
-"https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+  const firebaseConfig = {
+    apiKey: "AIzaSyDMbm7dpYeop4MJAXBtC6J6sNQYvHU8WZw",
+    authDomain: "popskate-480e5.firebaseapp.com",
+    databaseURL: "https://popskate-480e5-default-rtdb.firebaseio.com",
+    projectId: "popskate-480e5",
+    storageBucket: "popskate-480e5.firebasestorage.app",
+    messagingSenderId: "849168464452",
+    appId: "1:849168464452:web:0e70ef682616ab50389a11",
+    measurementId: "G-WH6PF04R2J"
+  };
 
-import {
-  getDatabase,
-  ref,
-  onValue,
-  set,
-  push,
-  remove
-} from
-"https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js";
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+  const bookingsRef = ref(db, 'bookings');
+  const archiveRef = ref(db, 'archive');
 
-const firebaseConfig = {
-  apiKey: "AIzaSyDMbm7dpYeop4MJAXBtC6J6sNQYvHU8WZw",
-  authDomain: "popskate-480e5.firebaseapp.com",
-  databaseURL: "https://popskate-480e5-default-rtdb.firebaseio.com",
-  projectId: "popskate-480e5",
-  storageBucket: "popskate-480e5.firebasestorage.app",
-  messagingSenderId: "849168464452",
-  appId: "1:849168464452:web:0e70ef682616ab50389a11",
-  measurementId: "G-WH6PF04R2J"
-};
-
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
-
-window.__firebase = {
-  db,
-  ref,
-  onValue,
-  set,
-  push,
-  remove,
-  bookingsRef: ref(db, "bookings"),
-  archiveRef: ref(db, "archive")
-};
-
+  window.__firebase = { db, ref, onValue, set, push, remove, bookingsRef, archiveRef };
 </script>
 
 <!-- React -->
@@ -97,2137 +50,651 @@ window.__firebase = {
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
+<script type="text/babel" data-type="module">
+const { useState, useEffect, useMemo } = React;
 
-<script type="text/babel">
+const LOGO_URL = "https://i.ibb.co/gMQ0KfwD/IMG-20260313-164930.jpg";
 
-const { useState, useEffect } = React;
-
-const LOGO_URL =
-"https://i.ibb.co/gMQ0KfwD/IMG-20260313-164930.jpg";
-
-
-/* =========================
-   DAYS / TIMES
-========================= */
-
+// السبت والاتنين والأربع والخميس: 3 إلى 9. الأحد والثلاثاء: 12 إلى 3.
 const DAYS = [
-
-  {
-    id: "sat",
-    name: "السبت",
-    times: ["3:00","4:00","5:00","6:00","7:00","8:00","9:00"]
-  },
-
-  {
-    id: "sun",
-    name: "الأحد",
-    times: ["12:00","1:00","2:00","3:00"]
-  },
-
-  {
-    id: "mon",
-    name: "الاتنين",
-    times: ["3:00","4:00","5:00","6:00","7:00","8:00","9:00"]
-  },
-
-  {
-    id: "tue",
-    name: "الثلاثاء",
-    times: ["12:00","1:00","2:00","3:00"]
-  },
-
-  {
-    id: "wed",
-    name: "الأربع",
-    times: ["3:00","4:00","5:00","6:00","7:00","8:00","9:00"]
-  },
-
-  {
-    id: "thu",
-    name: "الخميس",
-    times: ["3:00","4:00","5:00","6:00","7:00","8:00","9:00"]
-  }
-
+  { id: 'sat', name: 'السبت', times: ['3:00', '4:00', '5:00', '6:00', '7:00', '8:00', '9:00'] },
+  { id: 'sun', name: 'الأحد', times: ['12:00', '1:00', '2:00', '3:00'] },
+  { id: 'mon', name: 'الاتنين', times: ['3:00', '4:00', '5:00', '6:00', '7:00', '8:00', '9:00'] },
+  { id: 'tue', name: 'الثلاثاء', times: ['12:00', '1:00', '2:00', '3:00'] },
+  { id: 'wed', name: 'الأربع', times: ['3:00', '4:00', '5:00', '6:00', '7:00', '8:00', '9:00'] },
+  { id: 'thu', name: 'الخميس', times: ['3:00', '4:00', '5:00', '6:00', '7:00', '8:00', '9:00'] },
 ];
 
-const SESSION_OPTIONS = [4,8,12,16];
-
-
-/* =========================
-   DATE HELPERS
-========================= */
+const SESSION_OPTIONS = [4, 8, 12, 16];
 
 function todayStr() {
-  return new Date().toISOString().slice(0,10);
+  return new Date().toISOString().slice(0, 10);
 }
 
-const DAY_INDEX = {
-  sun: 0,
-  mon: 1,
-  tue: 2,
-  wed: 3,
-  thu: 4,
-  sat: 6
-};
-
-function normalizePhone(phone) {
-  return String(phone || "")
-    .replace(/\s/g,"")
-    .replace(/[^\d+]/g,"");
+function makeAttendance(sessionsCount) {
+  // كل 4 حصص = خانة واحدة (حضور/غياب/اعتذار)
+  const slots = Math.ceil(sessionsCount / 4);
+  return Array.from({ length: slots }, (_, i) => ({
+    index: i + 1,
+    status: null, // 'present' | 'absent' | 'excused'
+    excuseReason: '',
+  }));
 }
-
-function getDayInfo(id) {
-  return DAYS.find(d => d.id === id);
-}
-
-
-/*
-  إنشاء الحصص الفعلية للاشتراك
-  حسب الأيام المختارة + البداية + النهاية + عدد الحصص
-*/
-function generateSessions(schedule, startDate, endDate, totalSessions) {
-
-  if (!schedule || !schedule.length || !startDate || !endDate) {
-    return [];
-  }
-
-  const result = [];
-
-  let current = new Date(startDate + "T00:00:00");
-  const end = new Date(endDate + "T00:00:00");
-
-  while (current <= end && result.length < totalSessions) {
-
-    const jsDay = current.getDay();
-
-    schedule.forEach(item => {
-
-      if (result.length >= totalSessions) return;
-
-      if (DAY_INDEX[item.day] === jsDay) {
-
-        const date =
-          current.toISOString().slice(0,10);
-
-        result.push({
-          id: `${date}_${item.day}_${item.time}`,
-          date,
-          day: item.day,
-          time: item.time,
-          status: "pending",
-          excuseReason: ""
-        });
-
-      }
-
-    });
-
-    current.setDate(current.getDate() + 1);
-  }
-
-  return result;
-}
-
-
-/* =========================
-   MAIN APP
-========================= */
 
 function PopskateApp() {
+  const [tab, setTab] = useState('form');
+  const [bookings, setBookings] = useState([]);
+  const [archive, setArchive] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [toast, setToast] = useState(null);
 
-  const [tab,setTab] = useState("form");
+  // form state
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [selectedSlots, setSelectedSlots] = useState([]); // [{day, time}]
+  const [amount, setAmount] = useState('');
+  const [paid, setPaid] = useState(false);
+  const [sessions, setSessions] = useState(null);
+  const [startDate, setStartDate] = useState(todayStr());
+  const [endDate, setEndDate] = useState('');
+  const [notes, setNotes] = useState('');
+  const [errors, setErrors] = useState({});
+  const [phoneMatch, setPhoneMatch] = useState(null);
 
-  const [bookings,setBookings] = useState([]);
-  const [archive,setArchive] = useState([]);
+  // groups view state
+  const [viewDay, setViewDay] = useState(null);
+  const [viewTime, setViewTime] = useState(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [confirmArchiveDeleteId, setConfirmArchiveDeleteId] = useState(null);
+  const [excuseModal, setExcuseModal] = useState(null); // { bookingId, slotIndex }
+  const [excuseText, setExcuseText] = useState('');
 
-  const [loading,setLoading] = useState(true);
-  const [syncing,setSyncing] = useState(false);
-  const [toast,setToast] = useState(null);
-
-  /* FORM */
-
-  const [name,setName] = useState("");
-  const [phone,setPhone] = useState("");
-
-  const [schedule,setSchedule] = useState([
-    {day:"",time:""},
-    {day:"",time:""}
-  ]);
-
-  const [amount,setAmount] = useState("");
-  const [paid,setPaid] = useState(false);
-
-  const [sessions,setSessions] = useState(null);
-
-  const [startDate,setStartDate] =
-    useState(todayStr());
-
-  const [endDate,setEndDate] =
-    useState("");
-
-  const [notes,setNotes] = useState("");
-
-  const [errors,setErrors] = useState({});
-
-  const [phoneMatch,setPhoneMatch] = useState(null);
-
-  /* GROUPS */
-
-  const [viewDay,setViewDay] = useState(null);
-  const [viewTime,setViewTime] = useState(null);
-
-  /* ARCHIVE */
-
-  const [archiveOpen,setArchiveOpen] = useState(false);
-
-
-  /* =========================
-     TOAST
-  ========================= */
-
-  function showToast(message) {
-
-    setToast(message);
-
-    setTimeout(() => {
-      setToast(null);
-    },3000);
-
-  }
-
-
-  /* =========================
-     FIREBASE LISTENERS
-  ========================= */
+  const showToast = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
+  };
 
   useEffect(() => {
+    const { onValue, bookingsRef, archiveRef } = window.__firebase;
+    const unsub1 = onValue(bookingsRef, (snapshot) => {
+      const data = snapshot.val();
+      const list = data
+        ? Object.entries(data).map(([id, val]) => ({ id, ...val })).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+        : [];
+      setBookings(list);
+      setLoading(false);
+    }, (error) => {
+      setLoading(false);
+      showToast('خطأ اتصال: ' + error.message);
+    });
+    const unsub2 = onValue(archiveRef, (snapshot) => {
+      const data = snapshot.val();
+      const list = data
+        ? Object.entries(data).map(([id, val]) => ({ id, ...val })).sort((a, b) => (b.archivedAt || 0) - (a.archivedAt || 0))
+        : [];
+      setArchive(list);
+    }, (error) => {
+      showToast('خطأ اتصال بالأرشيف: ' + error.message);
+    });
+    return () => { unsub1(); unsub2(); };
+  }, []);
 
-    const {
-      onValue,
-      bookingsRef,
-      archiveRef
-    } = window.__firebase;
-
-    const unsubscribeBookings =
-      onValue(bookingsRef,(snapshot) => {
-
-        const data = snapshot.val();
-
-        if(data) {
-
-          const list =
-            Object.entries(data)
-            .map(([id,val]) => ({
-              id,
-              ...val
-            }))
-            .sort(
-              (a,b) =>
-              (b.createdAt || 0) -
-              (a.createdAt || 0)
-            );
-
-          setBookings(list);
-
-        } else {
-
-          setBookings([]);
-
-        }
-
-        setLoading(false);
-
-      });
-
-
-    const unsubscribeArchive =
-      onValue(archiveRef,(snapshot) => {
-
-        const data = snapshot.val();
-
-        if(data) {
-
-          const list =
-            Object.entries(data)
-            .map(([id,val]) => ({
-              id,
-              ...val
-            }))
-            .sort(
-              (a,b) =>
-              (b.archivedAt || 0) -
-              (a.archivedAt || 0)
-            );
-
-          setArchive(list);
-
-        } else {
-
-          setArchive([]);
-
-        }
-
-      });
-
-
-    return () => {
-
-      unsubscribeBookings();
-      unsubscribeArchive();
-
-    };
-
-  },[]);
-
-
-  /* =========================
-     PHONE LIVE SEARCH
-  ========================= */
-
+  // البحث الفوري عن رقم الهاتف في الأرشيف والحجوزات الحالية
   useEffect(() => {
+    const cleaned = phone.trim();
+    if (cleaned.length < 6) { setPhoneMatch(null); return; }
+    const activeMatch = bookings.find((b) => b.phone === cleaned);
+    const archiveMatch = !activeMatch ? archive.find((b) => b.phone === cleaned) : null;
+    setPhoneMatch(activeMatch ? { ...activeMatch, source: 'active' } : archiveMatch ? { ...archiveMatch, source: 'archive' } : null);
+  }, [phone, bookings, archive]);
 
-    const p = normalizePhone(phone);
+  const fillFromMatch = () => {
+    if (!phoneMatch) return;
+    setName(phoneMatch.name || '');
+    showToast('تم استدعاء بيانات العميل');
+  };
 
-    if(!p || p.length < 4) {
-
-      setPhoneMatch(null);
-      return;
-
-    }
-
-    const active =
-      bookings.find(
-        b => normalizePhone(b.phone) === p
-      );
-
-    const archived =
-      archive.find(
-        b => normalizePhone(b.phone) === p
-      );
-
-    if(active) {
-
-      setPhoneMatch({
-        type:"active",
-        booking:active
-      });
-
-    } else if(archived) {
-
-      setPhoneMatch({
-        type:"archive",
-        booking:archived
-      });
-
-    } else {
-
-      setPhoneMatch(null);
-
-    }
-
-  },[phone,bookings,archive]);
-
-
-  /* =========================
-     RESET
-  ========================= */
-
-  function resetForm() {
-
-    setName("");
-    setPhone("");
-
-    setSchedule([
-      {day:"",time:""},
-      {day:"",time:""}
-    ]);
-
-    setAmount("");
+  const resetForm = () => {
+    setName('');
+    setPhone('');
+    setSelectedSlots([]);
+    setAmount('');
     setPaid(false);
     setSessions(null);
-
     setStartDate(todayStr());
-    setEndDate("");
-
-    setNotes("");
-
+    setEndDate('');
+    setNotes('');
     setErrors({});
-
     setPhoneMatch(null);
+  };
 
-  }
-
-
-  /* =========================
-     UPDATE SCHEDULE
-  ========================= */
-
-  function updateSchedule(index,key,value) {
-
-    setSchedule(prev => {
-
-      const copy = [...prev];
-
-      copy[index] = {
-        ...copy[index],
-        [key]:value
-      };
-
-      if(key === "day") {
-        copy[index].time = "";
-      }
-
-      return copy;
-
+  const toggleSlot = (dayId, time) => {
+    setSelectedSlots((prev) => {
+      const exists = prev.find((s) => s.day === dayId && s.time === time);
+      if (exists) return prev.filter((s) => !(s.day === dayId && s.time === time));
+      return [...prev, { day: dayId, time }];
     });
+  };
 
-  }
-
-
-  /* =========================
-     REMOVE SECOND DAY
-  ========================= */
-
-  function removeSecondDay() {
-
-    setSchedule([
-      schedule[0]
-    ]);
-
-  }
-
-
-  /* =========================
-     ADD SECOND DAY
-  ========================= */
-
-  function addSecondDay() {
-
-    if(schedule.length >= 2) return;
-
-    setSchedule([
-      ...schedule,
-      {day:"",time:""}
-    ]);
-
-  }
-
-
-  /* =========================
-     VALIDATE
-  ========================= */
-
-  function validate() {
-
+  const validate = () => {
     const e = {};
     const missing = [];
-
-    if(!name.trim()) {
-      e.name=true;
-      missing.push("الاسم");
-    }
-
-    if(!phone.trim()) {
-      e.phone=true;
-      missing.push("الموبايل");
-    }
-
-    if(!schedule[0]?.day) {
-      e.schedule=true;
-      missing.push("اليوم الأول");
-    }
-
-    if(!schedule[0]?.time) {
-      e.schedule=true;
-      missing.push("ساعة اليوم الأول");
-    }
-
-    if(schedule.length === 2) {
-
-      if(!schedule[1].day) {
-        e.schedule=true;
-        missing.push("اليوم الثاني");
-      }
-
-      if(!schedule[1].time) {
-        e.schedule=true;
-        missing.push("ساعة اليوم الثاني");
-      }
-
-    }
-
-    if(!amount.trim()) {
-      e.amount=true;
-      missing.push("المبلغ");
-    }
-
-    if(!sessions) {
-      e.sessions=true;
-      missing.push("عدد الحصص");
-    }
-
-    if(!startDate) {
-      e.startDate=true;
-      missing.push("تاريخ البداية");
-    }
-
-    if(!endDate) {
-      e.endDate=true;
-      missing.push("تاريخ النهاية");
-    }
-
-    if(
-      startDate &&
-      endDate &&
-      endDate < startDate
-    ) {
-
-      e.endDate=true;
-      missing.push("تاريخ النهاية يجب أن يكون بعد البداية");
-
-    }
-
+    if (!name.trim()) { e.name = true; missing.push('الاسم'); }
+    if (!phone.trim()) { e.phone = true; missing.push('الموبايل'); }
+    if (selectedSlots.length === 0) { e.slots = true; missing.push('اليوم والساعة'); }
+    if (!amount.trim()) { e.amount = true; missing.push('المبلغ'); }
+    if (!sessions) { e.sessions = true; missing.push('عدد الحصص'); }
+    if (!startDate) { e.startDate = true; missing.push('تاريخ البداية'); }
+    if (!endDate) { e.endDate = true; missing.push('تاريخ النهاية'); }
     setErrors(e);
+    return { valid: Object.keys(e).length === 0, missing };
+  };
 
-    return {
-      valid:Object.keys(e).length === 0,
-      missing
-    };
-
-  }
-
-
-  /* =========================
-     SUBMIT
-  ========================= */
-
-  async function submitBooking(e) {
-
-    e.preventDefault();
-
-    const result = validate();
-
-    if(!result.valid) {
-
-      showToast(
-        "محتاج تملى: " +
-        result.missing.join("، ")
-      );
-
-      return;
-
-    }
-
-    const cleanSchedule =
-      schedule.filter(
-        x => x.day && x.time
-      );
-
-    const generatedSessions =
-      generateSessions(
-        cleanSchedule,
-        startDate,
-        endDate,
-        sessions
-      );
-
-    if(generatedSessions.length < sessions) {
-
-      showToast(
-        `الفترة المحددة لا تحتوي على ${sessions} حصص حسب الأيام المختارة`
-      );
-
-      return;
-
-    }
-
-    setSyncing(true);
-
+  const submitBooking = async (ev) => {
+    ev.preventDefault();
     try {
-
-      const {
-        push,
-        set,
-        bookingsRef
-      } = window.__firebase;
-
+      const { valid, missing } = validate();
+      if (!valid) {
+        showToast('محتاج تملى: ' + missing.join('، '));
+        return;
+      }
+      setSyncing(true);
+      const { push, set, bookingsRef } = window.__firebase;
       const newRef = push(bookingsRef);
-
-      await set(newRef,{
-
-        name:name.trim(),
-
-        phone:phone.trim(),
-
-        schedule:cleanSchedule,
-
-        amount:amount.trim(),
-
+      await set(newRef, {
+        name: name.trim(),
+        phone: phone.trim(),
+        slots: selectedSlots,
+        amount: amount.trim(),
         paid,
-
         sessions,
-
         startDate,
-
         endDate,
-
-        notes:notes.trim(),
-
-        attendance:generatedSessions,
-
-        createdAt:Date.now()
-
+        notes: notes.trim(),
+        attendance: makeAttendance(sessions),
+        createdAt: Date.now(),
       });
-
-      showToast("تم تسجيل الاشتراك بنجاح");
-
+      showToast('تم تسجيل الاشتراك بنجاح');
       resetForm();
-
-    } catch(err) {
-
-      console.error(err);
-
-      showToast(
-        "حصل خطأ: " +
-        (err?.message || "جرب تاني")
-      );
-
+    } catch (err) {
+      showToast('حصل خطأ: ' + (err && err.message ? err.message : 'جرب تاني'));
     }
-
     setSyncing(false);
+  };
 
-  }
+  const updateBooking = async (id, patch) => {
+    const { ref, set, db } = window.__firebase;
+    const booking = bookings.find((b) => b.id === id);
+    if (!booking) return;
+    const bookingRef = ref(db, `bookings/${id}`);
+    setSyncing(true);
+    try {
+      const { id: _drop, ...rest } = booking;
+      await set(bookingRef, { ...rest, ...patch });
+    } catch (err) {
+      showToast('حصل خطأ في التحديث');
+    }
+    setSyncing(false);
+  };
 
+  const togglePaid = (id, currentPaid) => updateBooking(id, { paid: !currentPaid });
 
-  /* =========================
-     LOAD CUSTOMER DATA
-  ========================= */
+  const updateNotes = (id, newNotes) => updateBooking(id, { notes: newNotes });
 
-  function loadCustomerData(match) {
-
-    const b = match.booking;
-
-    setName(b.name || "");
-    setPhone(b.phone || "");
-
-    const loadedSchedule =
-      b.schedule ||
-      (
-        b.day ?
-        [{day:b.day,time:b.time}] :
-        []
-      );
-
-    setSchedule(
-      loadedSchedule.length >= 2
-      ? loadedSchedule.slice(0,2)
-      : [
-          loadedSchedule[0] || {day:"",time:""},
-          {day:"",time:""}
-        ]
+  const setAttendance = (id, slotIndex, status, excuseReason) => {
+    const booking = bookings.find((b) => b.id === id);
+    if (!booking) return;
+    const attendance = (booking.attendance || []).map((a) =>
+      a.index === slotIndex ? { ...a, status, excuseReason: status === 'excused' ? (excuseReason || '') : '' } : a
     );
-
-    setAmount(b.amount || "");
-    setPaid(!!b.paid);
-    setSessions(b.sessions || null);
-
-    setStartDate(
-      b.startDate || todayStr()
-    );
-
-    setEndDate(b.endDate || "");
-
-    setNotes(b.notes || "");
-
-    showToast("تم استدعاء بيانات العميل");
-
-  }
-
-
-  /* =========================
-     UNIQUE PHONE COUNT
-  ========================= */
-
-  function uniqueCount(list) {
-
-    const phones = new Set();
-
-    list.forEach(b => {
-
-      const p = normalizePhone(b.phone);
-
-      if(p) phones.add(p);
-
-    });
-
-    return phones.size;
-
-  }
-
-
-  /* =========================
-     GROUP MEMBERS
-  ========================= */
-
-  function groupMembers(day,time) {
-
-    return bookings.filter(b => {
-
-      const schedules =
-        b.schedule ||
-        (
-          b.day ?
-          [{day:b.day,time:b.time}] :
-          []
-        );
-
-      return schedules.some(
-        s =>
-          s.day === day &&
-          s.time === time
-      );
-
-    });
-
-  }
-
-
-  /* =========================
-     ARCHIVE BOOKING
-  ========================= */
-
-  async function archiveBooking(id) {
-
-    const booking =
-      bookings.find(b => b.id === id);
-
-    if(!booking) return;
-
-    setSyncing(true);
-
-    try {
-
-      const {
-        ref,
-        set,
-        remove,
-        db
-      } = window.__firebase;
-
-      const archiveRef =
-        ref(db,`archive/${id}`);
-
-      const bookingRef =
-        ref(db,`bookings/${id}`);
-
-      await set(
-        archiveRef,
-        {
-          ...booking,
-          archivedAt:Date.now()
-        }
-      );
-
-      await remove(bookingRef);
-
-      showToast(
-        "تم نقل المشترك إلى الأرشيف"
-      );
-
-    } catch(err) {
-
-      console.error(err);
-
-      showToast(
-        "حصل خطأ أثناء الأرشفة"
-      );
-
-    }
-
-    setSyncing(false);
-
-  }
-
-
-  /* =========================
-     PERMANENT DELETE ARCHIVE
-  ========================= */
-
-  async function permanentlyDeleteArchive(id) {
-
-    const ok =
-      window.confirm(
-        "هل أنت متأكد من حذف هذا المشترك نهائيًا من الأرشيف؟\n\nلا يمكن التراجع عن هذه العملية."
-      );
-
-    if(!ok) return;
-
-    setSyncing(true);
-
-    try {
-
-      const {
-        ref,
-        remove,
-        db
-      } = window.__firebase;
-
-      await remove(
-        ref(db,`archive/${id}`)
-      );
-
-      showToast(
-        "تم الحذف النهائي"
-      );
-
-    } catch(err) {
-
-      showToast(
-        "حصل خطأ أثناء الحذف"
-      );
-
-    }
-
-    setSyncing(false);
-
-  }
-
-
-  /* =========================
-     EDIT NOTES
-  ========================= */
-
-  async function editNotes(booking) {
-
-    const newNotes =
-      window.prompt(
-        "تعديل الملاحظات:",
-        booking.notes || ""
-      );
-
-    if(newNotes === null) return;
-
-    setSyncing(true);
-
-    try {
-
-      const {
-        ref,
-        set,
-        db
-      } = window.__firebase;
-
-      const bookingRef =
-        ref(
-          db,
-          `bookings/${booking.id}`
-        );
-
-      await set(
-        bookingRef,
-        {
-          ...booking,
-          id:undefined,
-          notes:newNotes.trim()
-        }
-      );
-
-      showToast("تم تعديل الملاحظات");
-
-    } catch(err) {
-
-      showToast(
-        "حصل خطأ أثناء تعديل الملاحظات"
-      );
-
-    }
-
-    setSyncing(false);
-
-  }
-
-
-  /* =========================
-     ATTENDANCE
-  ========================= */
-
-  async function updateAttendance(
-    booking,
-    sessionIndex,
-    status
-  ) {
-
-    const copied =
-      JSON.parse(
-        JSON.stringify(
-          booking.attendance || []
-        )
-      );
-
-    if(!copied[sessionIndex]) return;
-
-    let excuseReason =
-      copied[sessionIndex].excuseReason || "";
-
-    if(status === "excuse") {
-
-      const reason =
-        window.prompt(
-          "اكتب سبب الاعتذار:"
-        );
-
-      if(reason === null) return;
-
-      excuseReason =
-        reason.trim();
-
+    updateBooking(id, { attendance });
+  };
+
+  const handleAttendanceClick = (bookingId, slotIndex, status) => {
+    if (status === 'excused') {
+      setExcuseText('');
+      setExcuseModal({ bookingId, slotIndex });
     } else {
-
-      excuseReason = "";
-
+      setAttendance(bookingId, slotIndex, status);
     }
+  };
 
-    copied[sessionIndex].status = status;
-    copied[sessionIndex].excuseReason =
-      excuseReason;
+  const confirmExcuse = () => {
+    if (!excuseModal) return;
+    setAttendance(excuseModal.bookingId, excuseModal.slotIndex, 'excused', excuseText.trim());
+    setExcuseModal(null);
+  };
 
+  const archiveBooking = async (id) => {
+    const { ref, set, remove, db, archiveRef, push } = window.__firebase;
+    const booking = bookings.find((b) => b.id === id);
+    if (!booking) return;
     setSyncing(true);
-
     try {
-
-      const {
-        ref,
-        set,
-        db
-      } = window.__firebase;
-
-      const bookingRef =
-        ref(
-          db,
-          `bookings/${booking.id}`
-        );
-
-      const clean = {
-        ...booking
-      };
-
-      delete clean.id;
-
-      clean.attendance = copied;
-
-      await set(
-        bookingRef,
-        clean
-      );
-
-      showToast("تم تحديث حالة الحصة");
-
-    } catch(err) {
-
-      showToast(
-        "حصل خطأ في تسجيل الحضور"
-      );
-
+      const { id: _drop, ...rest } = booking;
+      const newArchiveRef = push(archiveRef);
+      await set(newArchiveRef, { ...rest, archivedAt: Date.now() });
+      await remove(ref(db, `bookings/${id}`));
+      showToast('تم نقل الاشتراك للأرشيف');
+    } catch (err) {
+      showToast('حصل خطأ في الأرشفة');
     }
-
     setSyncing(false);
+    setConfirmDeleteId(null);
+  };
 
-  }
+  const deleteFromArchive = async (id) => {
+    const { ref, remove, db } = window.__firebase;
+    setSyncing(true);
+    try {
+      await remove(ref(db, `archive/${id}`));
+      showToast('تم حذف الاشتراك نهائيًا من الأرشيف');
+    } catch (err) {
+      showToast('حصل خطأ في الحذف');
+    }
+    setSyncing(false);
+    setConfirmArchiveDeleteId(null);
+  };
 
+  const dayInfo = (id) => DAYS.find((d) => d.id === id);
 
-  /* =========================
-     RENDER
-  ========================= */
+  const groupMembers = (dId, t) =>
+    bookings.filter((b) => (b.slots || []).some((s) => s.day === dId && s.time === t));
 
-  const selectedDayObj =
-    schedule[0]?.day
-    ? getDayInfo(schedule[0].day)
-    : null;
+  // عداد الأشخاص الفعليين (بدون تكرار) في يوم معين، بحساب رقم الهاتف
+  const uniqueCountForDay = (dId) => {
+    const phones = new Set(
+      bookings.filter((b) => (b.slots || []).some((s) => s.day === dId)).map((b) => b.phone)
+    );
+    return phones.size;
+  };
 
+  const uniqueCountForSlot = (dId, t) => {
+    const phones = new Set(groupMembers(dId, t).map((b) => b.phone));
+    return phones.size;
+  };
+
+  const attendanceLabel = (status) => {
+    if (status === 'present') return 'حضور';
+    if (status === 'absent') return 'غياب';
+    if (status === 'excused') return 'اعتذار';
+    return '—';
+  };
 
   return (
-
     <div dir="rtl" style={styles.page}>
-
-      {/* HEADER */}
-
       <header style={styles.header}>
-
         <div style={styles.headerInner}>
-
           <div style={styles.logoRow}>
-
-            <img
-              src={LOGO_URL}
-              alt="Popskate"
-              style={styles.logoMark}
-            />
-
+            <img src={LOGO_URL} alt="Popskate" style={styles.logoMark} />
             <div>
-
-              <h1 style={styles.title}>
-                Popskate
-              </h1>
-
-              <div style={styles.subtitle}>
-                نظام حجوزات مركز السكيت
-              </div>
-
+              <h1 style={styles.title}>Popskate</h1>
+              <div style={styles.subtitle}>نظام حجوزات مركز السكيت</div>
             </div>
-
           </div>
-
           <div style={styles.syncBadge}>
-
-            <span
-              style={{
-                ...styles.syncDot,
-                background:
-                  syncing
-                  ? "#E8A33D"
-                  : "#3BA776"
-              }}
-            />
-
-            {syncing
-              ? "بيتم الحفظ..."
-              : "متزامن"}
-
+            <span style={{ ...styles.syncDot, background: syncing ? '#E8A33D' : '#3BA776' }} />
+            {syncing ? 'بيتم الحفظ...' : 'متزامن'}
           </div>
-
         </div>
-
-
         <div style={styles.tabs}>
-
-          <button
-            style={{
-              ...styles.tabBtn,
-              ...(tab === "form"
-                ? styles.tabBtnActive
-                : {})
-            }}
-            onClick={() => setTab("form")}
-          >
-            + اشتراك جديد
-          </button>
-
-
-          <button
-            style={{
-              ...styles.tabBtn,
-              ...(tab === "groups"
-                ? styles.tabBtnActive
-                : {})
-            }}
-            onClick={() => setTab("groups")}
-          >
-            المجاميع
-          </button>
-
+          <button style={{ ...styles.tabBtn, ...(tab === 'form' ? styles.tabBtnActive : {}) }} onClick={() => setTab('form')}>+ اشتراك جديد</button>
+          <button style={{ ...styles.tabBtn, ...(tab === 'groups' ? styles.tabBtnActive : {}) }} onClick={() => { setTab('groups'); setViewDay(null); setViewTime(null); }}>المجاميع</button>
+          <button style={{ ...styles.tabBtn, ...(tab === 'archive' ? styles.tabBtnActive : {}) }} onClick={() => setTab('archive')}>الأرشيف</button>
         </div>
-
       </header>
 
-
       <div style={styles.content}>
+        {tab === 'form' && (
+          <form onSubmit={submitBooking} style={styles.formCard}>
+            <label style={styles.label}>اسم المتدرب</label>
+            <input style={{ ...styles.input, ...(errors.name ? styles.inputError : {}) }} value={name} onChange={(e) => setName(e.target.value)} placeholder="مثال: يوسف أحمد" />
 
-
-        {/* =========================
-            FORM
-        ========================= */}
-
-        {tab === "form" && (
-
-          <form
-            onSubmit={submitBooking}
-            style={styles.formCard}
-          >
-
-            <label style={styles.label}>
-              اسم المتدرب
-            </label>
-
-            <input
-              style={{
-                ...styles.input,
-                ...(errors.name
-                  ? styles.inputError
-                  : {})
-              }}
-              value={name}
-              onChange={
-                e => setName(e.target.value)
-              }
-              placeholder="مثال: يوسف أحمد"
-            />
-
-
-            <label style={styles.label}>
-              رقم الموبايل
-            </label>
-
-            <input
-              style={{
-                ...styles.input,
-                ...(errors.phone
-                  ? styles.inputError
-                  : {})
-              }}
-              value={phone}
-              onChange={
-                e => setPhone(e.target.value)
-              }
-              placeholder="01xxxxxxxxx"
-              type="tel"
-            />
-
-
-            {/* PHONE MATCH */}
+            <label style={styles.label}>رقم الموبايل</label>
+            <input style={{ ...styles.input, ...(errors.phone ? styles.inputError : {}) }} value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="01xxxxxxxxx" type="tel" />
 
             {phoneMatch && (
-
-              <div
-                style={{
-                  ...styles.phoneMatch,
-                  background:
-                    phoneMatch.type === "archive"
-                    ? "#FFF4DD"
-                    : "#EAF7F0"
-                }}
-              >
-
-                <div>
-
-                  <strong>
-                    الرقم موجود بالفعل
-                  </strong>
-
-                  <div style={styles.matchName}>
-                    {phoneMatch.booking.name}
-                  </div>
-
-                  <small>
-                    {phoneMatch.type === "archive"
-                      ? "المشترك موجود في الأرشيف"
-                      : "المشترك موجود في الاشتراكات الحالية"}
-                  </small>
-
+              <div style={styles.matchBox}>
+                <div style={styles.matchText}>
+                  ⚠️ الرقم ده موجود قبل كده {phoneMatch.source === 'archive' ? 'في الأرشيف' : 'في اشتراك حالي'} باسم "{phoneMatch.name}"
                 </div>
-
-                <button
-                  type="button"
-                  style={styles.loadBtn}
-                  onClick={() =>
-                    loadCustomerData(phoneMatch)
-                  }
-                >
-                  استدعاء البيانات
-                </button>
-
+                <button type="button" style={styles.matchBtn} onClick={fillFromMatch}>استدعاء البيانات</button>
               </div>
-
             )}
 
-
-            {/* DAY 1 */}
-
-            <div style={styles.sectionTitle}>
-              مواعيد التدريب
-            </div>
-
-            <div style={styles.scheduleBox}>
-
-              <div style={styles.scheduleHeader}>
-                <strong>اليوم الأول</strong>
-              </div>
-
-              <div style={styles.dayGrid}>
-
-                {DAYS.map(d => (
-
-                  <button
-                    type="button"
-                    key={d.id}
-                    style={{
-                      ...styles.smallPill,
-                      ...(schedule[0]?.day === d.id
-                        ? styles.pillActive
-                        : {})
-                    }}
-                    onClick={() =>
-                      updateSchedule(
-                        0,
-                        "day",
-                        d.id
-                      )
-                    }
-                  >
-                    {d.name}
-                  </button>
-
-                ))}
-
-              </div>
-
-
-              {schedule[0]?.day && (
-
-                <>
-
-                  <label style={styles.miniLabel}>
-                    الساعة
-                  </label>
-
-                  <div style={styles.dayGrid}>
-
-                    {getDayInfo(
-                      schedule[0].day
-                    ).times.map(t => (
-
-                      <button
-                        type="button"
-                        key={t}
-                        style={{
-                          ...styles.smallPill,
-                          ...(schedule[0].time === t
-                            ? styles.pillActive
-                            : {})
-                        }}
-                        onClick={() =>
-                          updateSchedule(
-                            0,
-                            "time",
-                            t
-                          )
-                        }
-                      >
-                        {t}
-                      </button>
-
-                    ))}
-
-                  </div>
-
-                </>
-
-              )}
-
-            </div>
-
-
-            {/* SECOND DAY */}
-
-            {schedule.length === 1 ? (
-
-              <button
-                type="button"
-                style={styles.addDayBtn}
-                onClick={addSecondDay}
-              >
-                + إضافة يوم ثاني
-              </button>
-
-            ) : (
-
-              <div style={styles.scheduleBox}>
-
-                <div style={styles.scheduleHeader}>
-
-                  <strong>
-                    اليوم الثاني
-                  </strong>
-
-                  <button
-                    type="button"
-                    style={styles.removeDayBtn}
-                    onClick={removeSecondDay}
-                  >
-                    إزالة
-                  </button>
-
-                </div>
-
-
-                <div style={styles.dayGrid}>
-
-                  {DAYS.map(d => (
-
-                    <button
-                      type="button"
-                      key={d.id}
-                      style={{
-                        ...styles.smallPill,
-                        ...(schedule[1]?.day === d.id
-                          ? styles.pillActive
-                          : {})
-                      }}
-                      onClick={() =>
-                        updateSchedule(
-                          1,
-                          "day",
-                          d.id
-                        )
-                      }
-                    >
-                      {d.name}
-                    </button>
-
-                  ))}
-
-                </div>
-
-
-                {schedule[1]?.day && (
-
-                  <>
-
-                    <label style={styles.miniLabel}>
-                      الساعة
-                    </label>
-
-                    <div style={styles.dayGrid}>
-
-                      {getDayInfo(
-                        schedule[1].day
-                      ).times.map(t => (
-
-                        <button
-                          type="button"
-                          key={t}
-                          style={{
-                            ...styles.smallPill,
-                            ...(schedule[1].time === t
-                              ? styles.pillActive
-                              : {})
-                          }}
-                          onClick={() =>
-                            updateSchedule(
-                              1,
-                              "time",
-                              t
-                            )
-                          }
-                        >
+            <label style={styles.label}>الأيام والمواعيد (ممكن تختار أكتر من موعد)</label>
+            <div style={{ ...styles.daysBox, ...(errors.slots && selectedSlots.length === 0 ? styles.inputError : {}) }}>
+              {DAYS.map((d) => (
+                <div key={d.id} style={styles.dayBlock}>
+                  <div style={styles.dayBlockTitle}>{d.name}</div>
+                  <div style={styles.pillRow}>
+                    {d.times.map((t) => {
+                      const active = selectedSlots.some((s) => s.day === d.id && s.time === t);
+                      return (
+                        <button key={t} type="button" style={{ ...styles.pillSmall, ...(active ? styles.pillActive : {}) }} onClick={() => toggleSlot(d.id, t)}>
                           {t}
                         </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
 
-                      ))}
-
-                    </div>
-
-                  </>
-
-                )}
-
-              </div>
-
-            )}
-
-
-            {/* SESSIONS */}
-
-            <label style={styles.label}>
-              عدد الحصص
-            </label>
-
+            <label style={styles.label}>عدد الحصص</label>
             <div style={styles.pillRow}>
-
-              {SESSION_OPTIONS.map(n => (
-
-                <button
-                  key={n}
-                  type="button"
-                  style={{
-                    ...styles.pill,
-                    ...(sessions === n
-                      ? styles.pillActive
-                      : {})
-                  }}
-                  onClick={() =>
-                    setSessions(n)
-                  }
-                >
+              {SESSION_OPTIONS.map((n) => (
+                <button key={n} type="button" style={{ ...styles.pill, ...(sessions === n ? styles.pillActive : {}), ...(errors.sessions && !sessions ? styles.pillError : {}) }} onClick={() => setSessions(n)}>
                   {n} حصص
                 </button>
-
               ))}
-
             </div>
-
-
-            {/* DATES */}
 
             <div style={styles.row2}>
-
-              <div style={{flex:1}}>
-
-                <label style={styles.label}>
-                  بداية الاشتراك
-                </label>
-
-                <input
-                  type="date"
-                  style={styles.input}
-                  value={startDate}
-                  onChange={
-                    e => setStartDate(
-                      e.target.value
-                    )
-                  }
-                />
-
+              <div style={{ flex: 1 }}>
+                <label style={styles.label}>بداية الاشتراك</label>
+                <input type="date" style={{ ...styles.input, ...(errors.startDate ? styles.inputError : {}) }} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
               </div>
-
-
-              <div style={{flex:1}}>
-
-                <label style={styles.label}>
-                  نهاية الاشتراك
-                </label>
-
-                <input
-                  type="date"
-                  style={styles.input}
-                  value={endDate}
-                  onChange={
-                    e => setEndDate(
-                      e.target.value
-                    )
-                  }
-                />
-
+              <div style={{ flex: 1 }}>
+                <label style={styles.label}>نهاية الاشتراك</label>
+                <input type="date" style={{ ...styles.input, ...(errors.endDate ? styles.inputError : {}) }} value={endDate} onChange={(e) => setEndDate(e.target.value)} />
               </div>
-
             </div>
 
-
-            {/* AMOUNT */}
-
-            <label style={styles.label}>
-              المبلغ
-            </label>
-
-            <input
-              style={styles.input}
-              value={amount}
-              onChange={
-                e => setAmount(e.target.value)
-              }
-              placeholder="مثال: 700 جنيه"
-            />
-
-
-            {/* PAID */}
+            <label style={styles.label}>المبلغ</label>
+            <input style={{ ...styles.input, ...(errors.amount ? styles.inputError : {}) }} value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="مثال: 300 جنيه" />
 
             <label style={styles.checkRow}>
-
-              <input
-                type="checkbox"
-                checked={paid}
-                onChange={
-                  e => setPaid(
-                    e.target.checked
-                  )
-                }
-                style={styles.checkbox}
-              />
-
+              <input type="checkbox" checked={paid} onChange={(e) => setPaid(e.target.checked)} style={styles.checkbox} />
               تم الدفع
-
             </label>
 
+            <label style={styles.label}>ملاحظات (اختياري)</label>
+            <textarea style={{ ...styles.input, minHeight: 60, resize: 'vertical' }} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="أي تفاصيل إضافية" />
 
-            {/* NOTES */}
-
-            <label style={styles.label}>
-              ملاحظات
-            </label>
-
-            <textarea
-              style={{
-                ...styles.input,
-                minHeight:70,
-                resize:"vertical"
-              }}
-              value={notes}
-              onChange={
-                e => setNotes(e.target.value)
-              }
-              placeholder="أي تفاصيل إضافية"
-            />
-
-
-            <button
-              type="submit"
-              style={styles.submitBtn}
-            >
-              حفظ الاشتراك
-            </button>
-
+            <button type="submit" style={styles.submitBtn}>حفظ الاشتراك</button>
           </form>
-
         )}
 
-
-        {/* =========================
-            GROUPS
-        ========================= */}
-
-        {tab === "groups" && (
-
+        {tab === 'groups' && (
           <div>
-
             {loading ? (
-
-              <div style={styles.empty}>
-                بيتم التحميل...
-              </div>
-
-            ) : (
-
+              <div style={styles.empty}>بيتم التحميل...</div>
+            ) : !viewDay ? (
               <>
-
-                {!viewDay && !archiveOpen && (
-
-                  <>
-
-                    <div style={styles.groupTopBar}>
-
-                      <span style={styles.display}>
-                        المجاميع
-                      </span>
-
-                      <button
-                        style={styles.archiveBtn}
-                        onClick={() =>
-                          setArchiveOpen(true)
-                        }
-                      >
-                        🗄 الأرشيف
-                        <span style={styles.archiveCount}>
-                          {archive.length}
-                        </span>
-                      </button>
-
-                    </div>
-
-
-                    <div style={styles.groupGrid}>
-
-                      {DAYS.map(d => {
-
-                        const dayBookings =
-                          bookings.filter(b => {
-
-                            const schedules =
-                              b.schedule ||
-                              (
-                                b.day
-                                ? [{
-                                  day:b.day,
-                                  time:b.time
-                                }]
-                                : []
-                              );
-
-                            return schedules.some(
-                              s =>
-                                s.day === d.id
-                            );
-
-                          });
-
-                        const count =
-                          uniqueCount(
-                            dayBookings
-                          );
-
-                        return (
-
-                          <button
-                            key={d.id}
-                            style={styles.groupCard}
-                            onClick={() =>
-                              setViewDay(d.id)
-                            }
-                          >
-
-                            <div
-                              style={
-                                styles.groupCardTitle
-                              }
-                            >
-                              {d.name}
-                            </div>
-
-                            <div
-                              style={
-                                styles.groupCardCount
-                              }
-                            >
-                              {count} مشترك فعلي
-                            </div>
-
-                          </button>
-
-                        );
-
-                      })}
-
-                    </div>
-
-                  </>
-
-                )}
-
-
-                {/* ARCHIVE */}
-
-                {archiveOpen && !viewDay && (
-
-                  <>
-
-                    <button
-                      style={styles.backBtn}
-                      onClick={() =>
-                        setArchiveOpen(false)
-                      }
-                    >
-                      → رجوع للمجاميع
+                <div style={styles.listHeader}><span style={styles.display}>اختار اليوم</span></div>
+                <div style={styles.groupGrid}>
+                  {DAYS.map((d) => (
+                    <button key={d.id} style={styles.groupCard} onClick={() => setViewDay(d.id)}>
+                      <div style={styles.groupCardTitle}>{d.name}</div>
+                      <div style={styles.groupCardCount}>{uniqueCountForDay(d.id)} متدرب</div>
                     </button>
-
-                    <div style={styles.listHeader}>
-
-                      <span style={styles.display}>
-                        الأرشيف
-                      </span>
-
-                    </div>
-
-
-                    {archive.length === 0 ? (
-
-                      <div style={styles.empty}>
-                        الأرشيف فارغ
-                      </div>
-
-                    ) : (
-
-                      <div style={styles.list}>
-
-                        {archive.map(b => (
-
-                          <div
-                            key={b.id}
-                            style={styles.bookingCard}
-                          >
-
-                            <div
-                              style={styles.bookingBody}
-                            >
-
-                              <div
-                                style={styles.bookingTop}
-                              >
-
-                                <span
-                                  style={
-                                    styles.bookingName
-                                  }
-                                >
-                                  {b.name}
-                                </span>
-
-                                <button
-                                  style={
-                                    styles.permanentDeleteBtn
-                                  }
-                                  onClick={() =>
-                                    permanentlyDeleteArchive(
-                                      b.id
-                                    )
-                                  }
-                                >
-                                  حذف نهائي
-                                </button>
-
-                              </div>
-
-
-                              <div
-                                style={
-                                  styles.bookingPhone
-                                }
-                              >
-                                {b.phone}
-                              </div>
-
-
-                              <div
-                                style={
-                                  styles.metaRow
-                                }
-                              >
-
-                                <span
-                                  style={
-                                    styles.metaTag
-                                  }
-                                >
-                                  {b.sessions} حصص
-                                </span>
-
-                                <span
-                                  style={
-                                    styles.metaTag
-                                  }
-                                >
-                                  {b.amount}
-                                </span>
-
-                              </div>
-
-
-                              <div
-                                style={
-                                  styles.scheduleText
-                                }
-                              >
-
-                                {(b.schedule || []).map(
-                                  (s,i) => {
-
-                                    const info =
-                                      getDayInfo(
-                                        s.day
-                                      );
-
-                                    return (
-                                      <span
-                                        key={i}
-                                        style={
-                                          styles.scheduleTag
-                                        }
-                                      >
-                                        {info?.name}{" "}
-                                        {s.time}
-                                      </span>
-                                    );
-
-                                  }
-                                )}
-
-                              </div>
-
-
-                              {b.notes && (
-
-                                <div
-                                  style={
-                                    styles.notesText
-                                  }
-                                >
-                                  {b.notes}
-                                </div>
-
-                              )}
-
-                            </div>
-
+                  ))}
+                </div>
+              </>
+            ) : !viewTime ? (
+              <>
+                <button style={styles.backBtn} onClick={() => setViewDay(null)}>→ رجوع لليوم</button>
+                <div style={styles.listHeader}><span style={styles.display}>{dayInfo(viewDay).name} — اختار الساعة</span></div>
+                <div style={styles.groupGrid}>
+                  {dayInfo(viewDay).times.map((t) => (
+                    <button key={t} style={styles.groupCard} onClick={() => setViewTime(t)}>
+                      <div style={styles.groupCardTitle}>{t}</div>
+                      <div style={styles.groupCardCount}>{uniqueCountForSlot(viewDay, t)} متدرب</div>
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <button style={styles.backBtn} onClick={() => setViewTime(null)}>→ رجوع للساعات</button>
+                <div style={styles.listHeader}><span style={styles.display}>{dayInfo(viewDay).name} — {viewTime}</span></div>
+                {groupMembers(viewDay, viewTime).length === 0 ? (
+                  <div style={styles.empty}>مفيش متدربين في المجموعة دي لسه</div>
+                ) : (
+                  <div style={styles.list}>
+                    {groupMembers(viewDay, viewTime).map((b) => (
+                      <div key={b.id} style={styles.bookingCard}>
+                        <div style={styles.bookingBody}>
+                          <div style={styles.bookingTop}>
+                            <span style={styles.bookingName}>{b.name}</span>
+                            <button style={styles.archiveBtn} onClick={() => setConfirmDeleteId(b.id)}>نقل للأرشيف</button>
                           </div>
+                          <div style={styles.bookingPhone}>{b.phone}</div>
+                          <div style={styles.metaRow}>
+                            <span style={styles.metaTag}>{b.sessions} حصص</span>
+                            <span style={styles.metaTag}>{b.startDate} → {b.endDate}</span>
+                          </div>
+                          {(b.slots || []).length > 1 && (
+                            <div style={styles.metaRow}>
+                              {b.slots.map((s, i) => (
+                                <span key={i} style={styles.metaTagAlt}>{dayInfo(s.day) ? dayInfo(s.day).name : s.day} {s.time}</span>
+                              ))}
+                            </div>
+                          )}
+                          <div style={styles.amountText}>المبلغ: {b.amount}</div>
 
-                        ))}
-
-                      </div>
-
-                    )}
-
-                  </>
-
-                )}
-
-
-                {/* SELECT DAY */}
-
-                {viewDay && !viewTime && (
-
-                  <>
-
-                    <button
-                      style={styles.backBtn}
-                      onClick={() =>
-                        setViewDay(null)
-                      }
-                    >
-                      → رجوع للمجاميع
-                    </button>
-
-                    <div style={styles.listHeader}>
-
-                      <span style={styles.display}>
-                        {getDayInfo(viewDay).name}
-                        {" "}— اختار الساعة
-                      </span>
-
-                    </div>
-
-
-                    <div style={styles.groupGrid}>
-
-                      {getDayInfo(viewDay)
-                        .times
-                        .map(t => {
-
-                          const members =
-                            groupMembers(
-                              viewDay,
-                              t
-                            );
-
-                          const count =
-                            uniqueCount(
-                              members
-                            );
-
-                          return (
-
-                            <button
-                              key={t}
-                              style={
-                                styles.groupCard
-                              }
-                              onClick={() =>
-                                setViewTime(t)
-                              }
-                            >
-
-                              <div
-                                style={
-                                  styles.groupCardTitle
-                                }
-                              >
-                                {t}
-                              </div>
-
-                              <div
-                                style={
-                                  styles.groupCardCount
-                                }
-                              >
-                                {count} مشترك فعلي
-                              </div>
-
-                            </button>
-
-                          );
-
-                        })}
-
-                    </div>
-
-                  </>
-
-                )}
-
-
-                {/* SELECT TIME */}
-
-                {viewDay && viewTime && (
-
-                  <>
-
-                    <button
-                      style={styles.backBtn}
-                      onClick={() =>
-                        setViewTime(null)
-                      }
-                    >
-                      → رجوع للساعات
-                    </button>
-
-                    <div style={styles.listHeader}>
-
-                      <span style={styles.display}>
-                        {getDayInfo(viewDay).name}
-                        {" "}— {viewTime}
-                      </span>
-
-                    </div>
-
-
-                    {groupMembers(
-                      viewDay,
-                      viewTime
-                    ).length === 0 ? (
-
-                      <div style={styles.empty}>
-                        مفيش متدربين في المجموعة دي
-                      </div>
-
-                    ) : (
-
-                      <div style={styles.list}>
-
-                        {groupMembers(
-                          viewDay,
-                          viewTime
-                        ).map(b => (
-
-                          <BookingCard
-                            key={b.id}
-                            booking={b}
-                            onArchive={
-                              archiveBooking
-                            }
-                            onEditNotes={
-                              editNotes
-                            }
-                            onAttendance={
-                              updateAttendance
-                            }
+                          <label style={{ ...styles.label, marginTop: 10 }}>ملاحظات</label>
+                          <textarea
+                            style={{ ...styles.input, minHeight: 44, fontSize: 12 }}
+                            value={b.notes || ''}
+                            onChange={(e) => updateNotes(b.id, e.target.value)}
+                            placeholder="تعديل الملاحظات..."
                           />
 
-                        ))}
+                          <button
+                            style={{
+                              ...styles.paidBtn,
+                              background: b.paid ? '#3BA77622' : '#F4F1EA',
+                              color: b.paid ? '#3BA776' : '#9A9591',
+                              border: b.paid ? '1px solid #3BA77655' : '1px solid #E5E0D8',
+                            }}
+                            onClick={() => togglePaid(b.id, b.paid)}
+                          >
+                            {b.paid ? '✓ تم الدفع' : 'لسه هيدفع'}
+                          </button>
 
+                          <label style={{ ...styles.label, marginTop: 12 }}>الحضور</label>
+                          <div style={styles.attendanceGrid}>
+                            {(b.attendance || []).map((a) => (
+                              <div key={a.index} style={styles.attendanceSlot}>
+                                <div style={styles.attendanceSlotTitle}>حصص {(a.index - 1) * 4 + 1}-{a.index * 4}</div>
+                                <div style={styles.attendanceBtnRow}>
+                                  <button
+                                    type="button"
+                                    style={{ ...styles.attBtn, ...(a.status === 'present' ? styles.attBtnPresent : {}) }}
+                                    onClick={() => handleAttendanceClick(b.id, a.index, 'present')}
+                                  >حضور</button>
+                                  <button
+                                    type="button"
+                                    style={{ ...styles.attBtn, ...(a.status === 'absent' ? styles.attBtnAbsent : {}) }}
+                                    onClick={() => handleAttendanceClick(b.id, a.index, 'absent')}
+                                  >غياب</button>
+                                  <button
+                                    type="button"
+                                    style={{ ...styles.attBtn, ...(a.status === 'excused' ? styles.attBtnExcused : {}) }}
+                                    onClick={() => handleAttendanceClick(b.id, a.index, 'excused')}
+                                  >اعتذار</button>
+                                </div>
+                                {a.status === 'excused' && a.excuseReason && (
+                                  <div style={styles.excuseNote}>السبب: {a.excuseReason}</div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       </div>
-
-                    )}
-
-                  </>
-
+                    ))}
+                  </div>
                 )}
-
               </>
-
             )}
-
           </div>
-
         )}
 
+        {tab === 'archive' && (
+          <div>
+            <div style={styles.listHeader}><span style={styles.display}>الأرشيف</span></div>
+            {archive.length === 0 ? (
+              <div style={styles.empty}>الأرشيف فاضي دلوقتي</div>
+            ) : (
+              <div style={styles.list}>
+                {archive.map((b) => (
+                  <div key={b.id} style={styles.bookingCard}>
+                    <div style={styles.bookingBody}>
+                      <div style={styles.bookingTop}>
+                        <span style={styles.bookingName}>{b.name}</span>
+                        <button style={styles.deleteBtn} onClick={() => setConfirmArchiveDeleteId(b.id)}>✕</button>
+                      </div>
+                      <div style={styles.bookingPhone}>{b.phone}</div>
+                      <div style={styles.metaRow}>
+                        <span style={styles.metaTag}>{b.sessions} حصص</span>
+                        <span style={styles.metaTag}>{b.startDate} → {b.endDate}</span>
+                      </div>
+                      {(b.slots || []).map((s, i) => (
+                        <span key={i} style={styles.metaTagAlt}>{dayInfo(s.day) ? dayInfo(s.day).name : s.day} {s.time}</span>
+                      ))}
+                      <div style={styles.amountText}>المبلغ: {b.amount} — {b.paid ? 'تم الدفع' : 'لم يدفع'}</div>
+                      {b.notes && <div style={styles.notesText}>{b.notes}</div>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-
-      {toast && (
-
-        <div style={styles.toast}>
-          {toast}
+      {/* تأكيد نقل للأرشيف */}
+      {confirmDeleteId && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalBox}>
+            <div style={styles.modalTitle}>نقل الاشتراك للأرشيف؟</div>
+            <div style={styles.modalText}>هيتشال من المجموعة الحالية ويتحفظ في الأرشيف.</div>
+            <div style={styles.modalActions}>
+              <button style={styles.modalCancel} onClick={() => setConfirmDeleteId(null)}>إلغاء</button>
+              <button style={styles.modalConfirm} onClick={() => archiveBooking(confirmDeleteId)}>نقل للأرشيف</button>
+            </div>
+          </div>
         </div>
-
       )}
 
+      {/* تأكيد حذف نهائي من الأرشيف */}
+      {confirmArchiveDeleteId && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalBox}>
+            <div style={styles.modalTitle}>حذف نهائي من الأرشيف؟</div>
+            <div style={styles.modalText}>مينفعش ترجع البيانات دي تاني بعد الحذف.</div>
+            <div style={styles.modalActions}>
+              <button style={styles.modalCancel} onClick={() => setConfirmArchiveDeleteId(null)}>إلغاء</button>
+              <button style={styles.modalConfirmDanger} onClick={() => deleteFromArchive(confirmArchiveDeleteId)}>حذف نهائي</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* نافذة سبب الاعتذار */}
+      {excuseModal && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalBox}>
+            <div style={styles.modalTitle}>سبب الاعتذار</div>
+            <textarea
+              autoFocus
+              style={{ ...styles.input, minHeight: 70, marginTop: 10 }}
+              value={excuseText}
+              onChange={(e) => setExcuseText(e.target.value)}
+              placeholder="اكتب سبب الاعتذار..."
+            />
+            <div style={styles.modalActions}>
+              <button style={styles.modalCancel} onClick={() => setExcuseModal(null)}>إلغاء</button>
+              <button style={styles.modalConfirm} onClick={confirmExcuse}>حفظ</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {toast && <div style={styles.toast}>{toast}</div>}
     </div>
-
   );
-
 }
 
+const styles = {
+  page: { minHeight: '100vh', background: '#F4F1EA', color: '#2B2822', paddingBottom: 40 },
+  header: { background: '#2B2822', color: '#F4F1EA', padding: '20px 16px 0' },
+  headerInner: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', maxWidth: 480, margin: '0 auto' },
+  logoRow: { display: 'flex', alignItems: 'center', gap: 12 },
+  logoMark: { width: 48, height: 48, borderRadius: 10, objectFit: 'cover', background: '#000' },
+  title: { margin: 0, fontSize: 22, fontWeight: 900 },
+  subtitle: { fontSize: 12, opacity: 0.7, marginTop: 2 },
+  syncBadge: { fontSize: 11, display: 'flex', alignItems: 'center', gap: 6, opacity: 0.85 },
+  syncDot: { width: 8, height: 8, borderRadius: '50%' },
+  tabs: { display: 'flex', gap: 4, maxWidth: 480, margin: '16px auto 0', padding: '0 16px' },
+  tabBtn: { flex: 1, background: 'transparent', color: '#F4F1EA99', fontSize: 12, fontWeight: 600, padding: '10px 0', borderBottom: '2px solid transparent' },
+  tabBtnActive: { color: '#E8A33D', borderBottom: '2px solid #E8A33D' },
+  content: { maxWidth: 480, margin: '0 auto', padding: '20px 16px' },
+  formCard: { background: '#fff', borderRadius: 16, padding: 18, boxShadow: '0 2px 10px rgba(0,0,0,0.08)' },
+  label: { display: 'block', fontSize: 12, color: '#7A756D', marginBottom: 6, marginTop: 14 },
+  input: { width: '100%', padding: '11px 12px', borderRadius: 10, border: '1px solid #E5E0D8', fontSize: 14, background: '#FAF8F4' },
+  inputError: { border: '1px solid #C0392B' },
+  row2: { display: 'flex', gap: 10 },
+  pillRow: { display: 'flex', flexWrap: 'wrap', gap: 8 },
+  pill: { padding: '9px 14px', borderRadius: 20, border: '1px solid #E5E0D8', background: '#FAF8F4', fontSize: 13, color: '#2B2822', fontWeight: 600 },
+  pillSmall: { padding: '6px 10px', borderRadius: 16, border: '1px solid #E5E0D8', background: '#FAF8F4', fontSize: 12, color: '#2B2822', fontWeight: 600 },
+  pillActive: { background: '#E8A33D', border: '1px solid #E8A33D', color: '#2B2822' },
+  pillError: { border: '1px solid #C0392B' },
+  daysBox: { border: '1px solid transparent', borderRadius: 10, padding: 2 },
+  dayBlock: { marginBottom: 12, background: '#FAF8F4', borderRadius: 10, padding: 10 },
+  dayBlockTitle: { fontSize: 13, fontWeight: 700, marginBottom: 8, fontFamily: 'Cairo, sans-serif' },
+  checkRow: { display: 'flex', alignItems: 'center', gap: 8, marginTop: 16, fontSize: 14 },
+  checkbox: { width: 18, height: 18 },
+  submitBtn: { width: '100%', background: '#2B2822', color: '#F4F1EA', fontWeight: 700, fontSize: 15, padding: '13px', borderRadius: 10, marginTop: 20 },
+  listHeader: { fontSize: 15, fontWeight: 700, marginBottom: 12 },
+  empty: { textAlign: 'center', color: '#9A9591', fontSize: 13, padding: '30px 0' },
+  groupGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 },
+  groupCard: { background: '#fff', borderRadius: 14, padding: '18px 10px', textAlign: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' },
+  groupCardTitle: { fontSize: 16, fontWeight: 700, fontFamily: 'Cairo, sans-serif' },
+  groupCardCount: { fontSize: 12, color: '#7A756D', marginTop: 4 },
+  backBtn: { background: 'transparent', color: '#2E86AB', fontSize: 13, fontWeight: 600, marginBottom: 14, padding: 0 },
+  list: { display: 'flex', flexDirection: 'column', gap: 10 },
+  bookingCard: { background: '#fff', borderRadius: 14, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' },
+  bookingBody: { padding: '12px 14px' },
+  bookingTop: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+  bookingName: { fontWeight: 700, fontSize: 15 },
+  deleteBtn: { background: 'transparent', color: '#C0392B', fontSize: 14, opacity: 0.6, padding: 4 },
+  archiveBtn: { background: '#F4F1EA', color: '#7A756D', fontSize: 11, fontWeight: 600, padding: '5px 10px', borderRadius: 8 },
+  bookingPhone: { fontSize: 13, color: '#7A756D', marginTop: 2, direction: 'ltr', textAlign: 'right' },
+  metaRow: { display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' },
+  metaTag: { fontSize: 11, background: '#F4F1EA', color: '#7A756D', padding: '3px 8px', borderRadius: 8 },
+  metaTagAlt: { fontSize: 11, background: '#2E86AB22', color: '#2E86AB', padding: '3px 8px', borderRadius: 8, marginTop: 4, display: 'inline-block', marginLeft: 4 },
+  amountText: { fontSize: 12, color: '#7A756D', marginTop: 6 },
+  notesText: { fontSize: 12, color: '#9A9591', marginTop: 4, fontStyle: 'italic' },
+  paidBtn: { marginTop: 10, fontSize: 12, fontWeight: 600, padding: '7px 14px', borderRadius: 8, width: '100%' },
+  matchBox: { background: '#E8A33D22', border: '1px solid #E8A33D55', borderRadius: 10, padding: 10, marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 },
+  matchText: { fontSize: 12, color: '#8a5c1c' },
+  matchBtn: { background: '#E8A33D', color: '#2B2822', fontSize: 12, fontWeight: 700, padding: '8px', borderRadius: 8 },
+  attendanceGrid: { display: 'flex', flexDirection: 'column', gap: 8, marginTop: 6 },
+  attendanceSlot: { background: '#FAF8F4', borderRadius: 10, padding: 10 },
+  attendanceSlotTitle: { fontSize: 11, color: '#7A756D', marginBottom: 6, fontWeight: 600 },
+  attendanceBtnRow: { display: 'flex', gap: 6 },
+  attBtn: { flex: 1, padding: '7px 0', borderRadius: 8, border: '1px solid #E5E0D8', background: '#fff', fontSize: 11, fontWeight: 600, color: '#7A756D' },
+  attBtnPresent: { background: '#3BA77622', border: '1px solid #3BA776', color: '#3BA776' },
+  attBtnAbsent: { background: '#C0392B22', border: '1px solid #C0392B', color: '#C0392B' },
+  attBtnExcused: { background: '#E8A33D22', border: '1px solid #E8A33D', color: '#8a5c1c' },
+  excuseNote: { fontSize: 11, color: '#8a5c1c', marginTop: 6, fontStyle: 'italic' },
+  toast: { position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', background: '#2B2822', color: '#fff', padding: '10px 20px', borderRadius: 30, fontSize: 13, boxShadow: '0 4px 14px rgba(0,0,0,0.2)', maxWidth: '90%', textAlign: 'center', zIndex: 100 },
+  modalOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, zIndex: 200 },
+  modalBox: { background: '#fff', borderRadius: 16, padding: 20, maxWidth: 340, width: '100%' },
+  modalTitle: { fontSize: 16, fontWeight: 700, fontFamily: 'Cairo, sans-serif' },
+  modalText: { fontSize: 13, color: '#7A756D', marginTop: 8 },
+  modalActions: { display: 'flex', gap: 10, marginTop: 18 },
+  modalCancel: { flex: 1, padding: '11px 0', borderRadius: 10, background: '#F4F1EA', color: '#2B2822', fontWeight: 600, fontSize: 13 },
+  modalConfirm: { flex: 1, padding: '11px 0', borderRadius: 10, background: '#2B2822', color: '#fff', fontWeight: 600, fontSize: 13 },
+  modalConfirmDanger: { flex: 1, padding: '11px 0', borderRadius: 10, background: '#C0392B', color: '#fff', fontWeight: 600, fontSize: 13 },
+};
 
-/* =========================
-   BOOKING CARD
-========================= */
-
-function BookingCard({
-  booking,
-  onArchive,
-  onEditNotes,
-  onAttendance
-}) {
-
-  const schedule =
-    booking.schedule ||
-    (
-      booking.day
-      ? [{
-        day:booking.day,
-        time:booking.time
-      }]
-      : []
-    );
-
-  const attendance =
-    booking.attendance || [];
-
-
-  return (
-
-    <div style={styles.bookingCard}>
-
-      <div style={styles.bookingBody}>
-
-        <div style={styles.bookingTop}>
-
-          <span style={styles.bookingName}>
-            {booking.name}
-          </span>
-
-          {/* لا يوجد X */}
-
-          <button
-            style={styles.archiveSmallBtn}
-            onClick={() =>
-              onArchive(booking.id)
-            }
-          >
-            🗄 أرشفة
-          </button>
-
-        </div>
-
-
-        <div style={styles.bookingPhone}>
-          {booking.phone}
-        </div>
-
-
-        {/* SCHEDULE */}
-
-        <div style={styles.scheduleText}>
-
-          {schedule.map((s,i) => {
-
-            const info =
-              getDayInfo(s.day);
-
-            return (
-
-              <span
-                key={i}
-                style={styles.scheduleTag}
-              >
-                {info?.name} {s.time}
-              </span>
-
-            );
-
-          })}
-
-        </div>
-
-
-        <div style={styles.metaRow}>
-
-          <span style={styles.metaTag}>
-            {booking.sessions} حصص
-          </span>
-
-          <span style={styles.metaTag}>
-            {booking.startDate}
-            {" → "}
-            {booking.endDate}
-          </span>
-
-        </div>
-
-
-        <div style={styles.amountText}>
-          المبلغ: {booking.amount}
-        </div>
-
-
-        {/* NOTES */}
-
-        <div style={styles.notesArea}>
-
-          <div style={styles.notesText}>
-            {booking.notes
-              ? booking.notes
-              : "لا توجد ملاحظات"}
-          </div>
-
-          <button
-            style={styles.editNotesBtn}
-            onClick={() =>
-              onEditNotes(booking)
-            }
-          >
-            ✏ تعديل الملاحظات
-          </button>
-
-        </div>
-
-
-        {/* PAID */}
-
-        <div
-          style={{
-            ...styles.paidBtn,
-            background:
-              booking.paid
-              ? "#3BA77622"
-              : "#F4F1EA",
-            color:
-              booking.paid
-              ? "#3BA776"
-              : "#9A9591",
-            border:
-              booking.paid
-              ? "1px solid #3BA77655"
-              : "1px solid #E5E0D8"
-          }}
-        >
-          {booking.paid
-            ? "✓ تم الدفع"
-            : "لسه هيدفع"}
-        </div>
-
-
-        {/* ATTENDANCE */}
-
-        <div style={styles.attendanceTitle}>
-          الحضور والغياب
-        </div>
-
-
-        <div style={styles.attendanceList}>
-
-          {attendance.map((session,index) => (
-
-            <div
-              key={session.id || index}
-              style={styles.attendanceRow}
-            >
-
-              <div style={styles.sessionInfo}>
-
-                <strong>
-                  حصة {index + 1}
-                </strong>
-
-                <small>
-                  {getDayInfo(
-                    session.day
-                  )?.name}
-                  {" "}
-                  {session.date}
-                  {" "}
-                  {session.time}
-                </small>
-
-              </div>
-
-
-              <div style={styles.attendanceButtons}>
-
-                <button
-                  style={{
-                    ...styles.attendanceBtn,
-                    ...(session.status === "present"
-                      ? styles.presentActive
-                      : {})
-                  }}
-                  onClick={() =>
-                    onAttendance(
-                      booking,
-                      index,
-                      "present"
-                    )
-                  }
-                >
-                  حضور
-                </button>
-
-
-                <button
-                  style={{
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<PopskateApp />);
+</script>
+</body>
+</html>
