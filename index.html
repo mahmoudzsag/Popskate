@@ -55,7 +55,6 @@ const { useState, useEffect, useMemo } = React;
 
 const LOGO_URL = "https://i.ibb.co/gMQ0KfwD/IMG-20260313-164930.jpg";
 
-// السبت والاتنين والأربع والخميس: 3 إلى 9. الأحد والثلاثاء: 12 إلى 3.
 const DAYS = [
   { id: 'sat', name: 'السبت', times: ['3:00', '4:00', '5:00', '6:00', '7:00', '8:00', '9:00'] },
   { id: 'sun', name: 'الأحد', times: ['12:00', '1:00', '2:00', '3:00'] },
@@ -72,7 +71,6 @@ function todayStr() {
 }
 
 function makeAttendance(sessionsCount, slots) {
-  // توزيع الحصص بالتساوي على الأيام المختارة، وكل 4 حصص = خانة واحدة لكل يوم
   if (!slots || slots.length === 0) return [];
   const perDay = Math.floor(sessionsCount / slots.length);
   const remainder = sessionsCount % slots.length;
@@ -103,7 +101,7 @@ function PopskateApp() {
   // form state
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [selectedSlots, setSelectedSlots] = useState([]); // [{day, time}]
+  const [selectedSlots, setSelectedSlots] = useState([]);
   const [amount, setAmount] = useState('');
   const [paid, setPaid] = useState(false);
   const [sessions, setSessions] = useState(null);
@@ -118,9 +116,9 @@ function PopskateApp() {
   const [viewTime, setViewTime] = useState(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [confirmArchiveDeleteId, setConfirmArchiveDeleteId] = useState(null);
-  const [excuseModal, setExcuseModal] = useState(null); // { bookingId, slotIndex }
+  const [excuseModal, setExcuseModal] = useState(null);
   const [excuseText, setExcuseText] = useState('');
-  const [showUnpaid, setShowUnpaid] = useState(false);
+  const [showUnpaidModal, setShowUnpaidModal] = useState(false);
 
   const showToast = (msg) => {
     setToast(msg);
@@ -152,7 +150,6 @@ function PopskateApp() {
     return () => { unsub1(); unsub2(); };
   }, []);
 
-  // البحث الفوري عن رقم الهاتف في الأرشيف والحجوزات الحالية
   useEffect(() => {
     const cleaned = phone.trim();
     if (cleaned.length < 6) { setPhoneMatch(null); return; }
@@ -251,7 +248,6 @@ function PopskateApp() {
   };
 
   const togglePaid = (id, currentPaid) => updateBooking(id, { paid: !currentPaid });
-
   const updateNotes = (id, newNotes) => updateBooking(id, { notes: newNotes });
 
   const setAttendance = (id, day, time, checkpointIndex, status, excuseReason) => {
@@ -320,41 +316,58 @@ function PopskateApp() {
   const groupMembers = (dId, t) =>
     bookings.filter((b) => (b.slots || []).some((s) => s.day === dId && s.time === t));
 
-  // عداد الأشخاص الفعليين (بدون تكرار) في يوم معين، بحساب رقم الهاتف
   const uniqueCountForDay = (dId) => {
     const phones = new Set(
-      bookings.filter((b) => (b.slots || []).some((s) => s.day === dId)).map((b) => b.phone)
+      bookings.filter((b) => (b.slots || []).some((s) => s.day === dId)).map((b) => (b.phone || '').trim())
     );
     return phones.size;
   };
 
   const uniqueCountForSlot = (dId, t) => {
-    const phones = new Set(groupMembers(dId, t).map((b) => b.phone));
+    const phones = new Set(groupMembers(dId, t).map((b) => (b.phone || '').trim()));
     return phones.size;
   };
 
-  // المجاميع العامة: كل مشترك يُحسب مرة واحدة فقط حسب رقم الهاتف
-  const uniqueBookings = useMemo(() => {
-    const map = new Map();
+  // تجميع الإحصائيات الشاملة الدقيقة حسب رقم الهاتف الفريد
+  const totals = useMemo(() => {
+    const uniqueMap = new Map();
+
     bookings.forEach((b) => {
-      const phoneKey = String(b.phone || '').replace(/\D/g, '');
-      if (!phoneKey) return;
-      if (!map.has(phoneKey)) map.set(phoneKey, b);
+      const phoneKey = (b.phone || '').trim() || b.id; // استخدام المعرف إذا كان الرقم فارغًا
+      if (!uniqueMap.has(phoneKey)) {
+        uniqueMap.set(phoneKey, {
+          phone: b.phone,
+          name: b.name,
+          bookings: [b]
+        });
+      } else {
+        uniqueMap.get(phoneKey).bookings.push(b);
+      }
     });
-    return Array.from(map.values());
+
+    const uniqueList = Array.from(uniqueMap.values());
+    const totalBookings = uniqueList.length;
+
+    let paidCount = 0;
+    const unpaidList = [];
+
+    uniqueList.forEach(user => {
+      const isAllPaid = user.bookings.every(b => b.paid);
+      if (isAllPaid) {
+        paidCount++;
+      } else {
+        const primaryBooking = user.bookings.find(b => !b.paid) || user.bookings[0];
+        unpaidList.push(primaryBooking);
+      }
+    });
+
+    return {
+      totalBookings,
+      paidCount,
+      unpaidCount: unpaidList.length,
+      unpaidList,
+    };
   }, [bookings]);
-
-  const totalBookings = uniqueBookings.length;
-  const totalPaid = uniqueBookings.filter((b) => b.paid).length;
-  const totalUnpaid = uniqueBookings.filter((b) => !b.paid).length;
-  const unpaidMembers = uniqueBookings.filter((b) => !b.paid);
-
-  const attendanceLabel = (status) => {
-    if (status === 'present') return 'حضور';
-    if (status === 'absent') return 'غياب';
-    if (status === 'excused') return 'اعتذار';
-    return '—';
-  };
 
   return (
     <div dir="rtl" style={styles.page}>
@@ -466,6 +479,22 @@ function PopskateApp() {
                     </button>
                   ))}
                 </div>
+
+                <div style={styles.statsContainer}>
+                  <div style={styles.statCard}>
+                    <div style={{ ...styles.statNumber, color: '#2B2822' }}>{totals.totalBookings}</div>
+                    <div style={styles.statLabel}>إجمالي الحجوزات</div>
+                  </div>
+                  <div style={styles.statCard}>
+                    <div style={{ ...styles.statNumber, color: '#3BA776' }}>{totals.paidCount}</div>
+                    <div style={styles.statLabel}>تم الدفع</div>
+                  </div>
+                  <button style={{ ...styles.statCard, ...styles.statBtn }} onClick={() => setShowUnpaidModal(true)}>
+                    <div style={{ ...styles.statNumber, color: '#C0392B' }}>{totals.unpaidCount}</div>
+                    <div style={styles.statLabel}>لسه هيدفع</div>
+                    <div style={{ fontSize: 10, color: '#C0392B', marginTop: 2 }}>اضغط لعرض الأسماء</div>
+                  </button>
+                </div>
               </>
             ) : !viewTime ? (
               <>
@@ -570,30 +599,6 @@ function PopskateApp() {
                 )}
               </>
             )}
-
-            {/* إجماليات الحجوزات */}
-            <div style={styles.summarySection}>
-              <div style={styles.summaryTitle}>إجماليات الحجوزات</div>
-              <div style={styles.summaryGrid}>
-                <div style={styles.summaryCard}>
-                  <div style={styles.summaryNumber}>{totalBookings}</div>
-                  <div style={styles.summaryLabel}>إجمالي الحجوزات</div>
-                </div>
-                <div style={styles.summaryCard}>
-                  <div style={{ ...styles.summaryNumber, color: '#3BA776' }}>{totalPaid}</div>
-                  <div style={styles.summaryLabel}>تم الدفع</div>
-                </div>
-                <button
-                  type="button"
-                  style={{ ...styles.summaryCard, ...styles.summaryButton }}
-                  onClick={() => setShowUnpaid(true)}
-                >
-                  <div style={{ ...styles.summaryNumber, color: '#C0392B' }}>{totalUnpaid}</div>
-                  <div style={styles.summaryLabel}>لسه هيدفع</div>
-                  <div style={styles.summaryHint}>اضغط لعرض الأسماء</div>
-                </button>
-              </div>
-            </div>
           </div>
         )}
 
@@ -630,12 +635,46 @@ function PopskateApp() {
         )}
       </div>
 
+      {/* نافذة عرض قائمة المشتركين الذين لم يدفعوا */}
+      {showUnpaidModal && (
+        <div style={styles.modalOverlay}>
+          <div style={{ ...styles.modalBox, maxWidth: 400, maxHeight: '80vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <div style={styles.modalTitle}>المشتركين (لسه هيدفع)</div>
+              <button style={{ background: 'none', fontSize: 18, fontWeight: 'bold' }} onClick={() => setShowUnpaidModal(false)}>✕</button>
+            </div>
+            {totals.unpaidList.length === 0 ? (
+              <div style={styles.empty}>جميع الحجوزات تم الدفع لها 👍</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {totals.unpaidList.map((item) => (
+                  <div key={item.id} style={{ background: '#FAF8F4', padding: 12, borderRadius: 10, border: '1px solid #E5E0D8' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ fontWeight: 700, fontSize: 14 }}>{item.name || 'غير معروف'}</div>
+                      <button 
+                        style={{ color: '#C0392B', background: 'none', fontSize: 11, fontWeight: 'bold' }}
+                        onClick={() => { setShowUnpaidModal(false); setConfirmDeleteId(item.id); }}
+                      >
+                        نقل للأرشيف ✕
+                      </button>
+                    </div>
+                    <div style={{ fontSize: 12, color: '#7A756D', marginTop: 2, direction: 'ltr', textAlign: 'right' }}>{item.phone || 'بدون رقم'}</div>
+                    <div style={{ fontSize: 12, color: '#C0392B', marginTop: 4, fontWeight: 600 }}>المبلغ المطلوب: {item.amount || 'غير محدد'}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button style={{ ...styles.modalCancel, width: '100%', marginTop: 16 }} onClick={() => setShowUnpaidModal(false)}>إغلاق</button>
+          </div>
+        </div>
+      )}
+
       {/* تأكيد نقل للأرشيف */}
       {confirmDeleteId && (
         <div style={styles.modalOverlay}>
           <div style={styles.modalBox}>
             <div style={styles.modalTitle}>نقل الاشتراك للأرشيف؟</div>
-            <div style={styles.modalText}>هيتشال من المجموعة الحالية ويتحفظ في الأرشيف.</div>
+            <div style={styles.modalText}>هيتشال من القائمة الحالية ويتحفظ في الأرشيف.</div>
             <div style={styles.modalActions}>
               <button style={styles.modalCancel} onClick={() => setConfirmDeleteId(null)}>إلغاء</button>
               <button style={styles.modalConfirm} onClick={() => archiveBooking(confirmDeleteId)}>نقل للأرشيف</button>
@@ -674,32 +713,6 @@ function PopskateApp() {
               <button style={styles.modalCancel} onClick={() => setExcuseModal(null)}>إلغاء</button>
               <button style={styles.modalConfirm} onClick={confirmExcuse}>حفظ</button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {showUnpaid && (
-        <div style={styles.modalOverlay} onClick={() => setShowUnpaid(false)}>
-          <div style={{ ...styles.modalBox, maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
-            <div style={styles.modalTitle}>المشتركين الذين لم يتم الدفع</div>
-            {unpaidMembers.length === 0 ? (
-              <div style={styles.empty}>كل المشتركين تم الدفع لهم ✓</div>
-            ) : (
-              <div style={styles.unpaidList}>
-                {unpaidMembers.map((b) => (
-                  <div key={b.id} style={styles.unpaidItem}>
-                    <div>
-                      <div style={styles.bookingName}>{b.name}</div>
-                      <div style={styles.bookingPhone}>{b.phone}</div>
-                    </div>
-                    <div style={styles.unpaidAmount}>{b.amount || '—'}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-            <button style={{ ...styles.modalCancel, width: '100%', marginTop: 14 }} onClick={() => setShowUnpaid(false)}>
-              إغلاق
-            </button>
           </div>
         </div>
       )}
@@ -745,6 +758,11 @@ const styles = {
   groupCard: { background: '#fff', borderRadius: 14, padding: '18px 10px', textAlign: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' },
   groupCardTitle: { fontSize: 16, fontWeight: 700, fontFamily: 'Cairo, sans-serif' },
   groupCardCount: { fontSize: 12, color: '#7A756D', marginTop: 4 },
+  statsContainer: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginTop: 20 },
+  statCard: { background: '#fff', borderRadius: 16, padding: '16px 8px', textAlign: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' },
+  statBtn: { transition: 'transform 0.1s active', cursor: 'pointer' },
+  statNumber: { fontSize: 28, fontWeight: 900, fontFamily: 'Cairo, sans-serif', lineHeight: 1 },
+  statLabel: { fontSize: 12, color: '#7A756D', marginTop: 8, fontWeight: 600 },
   backBtn: { background: 'transparent', color: '#2E86AB', fontSize: 13, fontWeight: 600, marginBottom: 14, padding: 0 },
   list: { display: 'flex', flexDirection: 'column', gap: 10 },
   bookingCard: { background: '#fff', borderRadius: 14, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' },
@@ -772,17 +790,6 @@ const styles = {
   attBtnAbsent: { background: '#C0392B22', border: '1px solid #C0392B', color: '#C0392B' },
   attBtnExcused: { background: '#E8A33D22', border: '1px solid #E8A33D', color: '#8a5c1c' },
   excuseNote: { fontSize: 11, color: '#8a5c1c', marginTop: 6, fontStyle: 'italic' },
-  summarySection: { marginTop: 22, paddingTop: 16, borderTop: '1px solid #E5E0D8' },
-  summaryTitle: { fontSize: 15, fontWeight: 700, marginBottom: 10, fontFamily: 'Cairo, sans-serif' },
-  summaryGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 },
-  summaryCard: { background: '#fff', borderRadius: 12, padding: '12px 6px', textAlign: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', border: '1px solid #EEE9E1' },
-  summaryButton: { width: '100%', cursor: 'pointer', fontFamily: 'inherit' },
-  summaryNumber: { fontSize: 22, fontWeight: 900, color: '#2B2822' },
-  summaryLabel: { fontSize: 11, color: '#7A756D', marginTop: 3, fontWeight: 600 },
-  summaryHint: { fontSize: 9, color: '#C0392B', marginTop: 5 },
-  unpaidList: { maxHeight: 360, overflowY: 'auto', marginTop: 12 },
-  unpaidItem: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#FAF8F4', borderRadius: 10, padding: '10px 12px', marginBottom: 7 },
-  unpaidAmount: { fontSize: 11, color: '#C0392B', fontWeight: 700, marginRight: 8 },
   toast: { position: 'fixed', bottom: 20, left: '50%', transform: 'translateX(-50%)', background: '#2B2822', color: '#fff', padding: '10px 20px', borderRadius: 30, fontSize: 13, boxShadow: '0 4px 14px rgba(0,0,0,0.2)', maxWidth: '90%', textAlign: 'center', zIndex: 100 },
   modalOverlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, zIndex: 200 },
   modalBox: { background: '#fff', borderRadius: 16, padding: 20, maxWidth: 340, width: '100%' },
